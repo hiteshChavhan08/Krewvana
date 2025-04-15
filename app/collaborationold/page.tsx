@@ -1,11 +1,9 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { Filter, Plus, Search, Users } from "lucide-react"
+import { Filter, Plus, Search, Users } from 'lucide-react'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -76,26 +74,25 @@ const groups = [
 export default function CollaborationPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filteredGroups, setFilteredGroups] = useState(groups)
-
+  
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value
     setSearchQuery(query)
-
+    
     if (!query.trim()) {
       setFilteredGroups(groups)
       return
     }
-
-    const filtered = groups.filter(
-      (group) =>
-        group.name.toLowerCase().includes(query.toLowerCase()) ||
-        group.description.toLowerCase().includes(query.toLowerCase()) ||
-        group.type.toLowerCase().includes(query.toLowerCase()),
+    
+    const filtered = groups.filter(group => 
+      group.name.toLowerCase().includes(query.toLowerCase()) ||
+      group.description.toLowerCase().includes(query.toLowerCase()) ||
+      group.type.toLowerCase().includes(query.toLowerCase())
     )
-
+    
     setFilteredGroups(filtered)
   }
-
+  
   return (
     <div className="container py-8">
       <div className="mb-8 flex items-center justify-between">
@@ -110,7 +107,7 @@ export default function CollaborationPage() {
           </Link>
         </Button>
       </div>
-
+      
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -139,20 +136,20 @@ export default function CollaborationPage() {
           </DropdownMenu>
         </div>
       </div>
-
+      
       <Tabs defaultValue="all" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="all">All Groups</TabsTrigger>
           <TabsTrigger value="joined">My Groups</TabsTrigger>
         </TabsList>
-
+        
         <TabsContent value="all" className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredGroups.map((group, index) => (
               <GroupCard key={group.id} group={group} index={index} />
             ))}
           </div>
-
+          
           {filteredGroups.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12">
               <Users className="h-12 w-12 text-muted-foreground" />
@@ -161,17 +158,15 @@ export default function CollaborationPage() {
             </div>
           )}
         </TabsContent>
-
+        
         <TabsContent value="joined" className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredGroups
-              .filter((group) => group.isJoined)
-              .map((group, index) => (
-                <GroupCard key={group.id} group={group} index={index} />
-              ))}
+            {filteredGroups.filter(group => group.isJoined).map((group, index) => (
+              <GroupCard key={group.id} group={group} index={index} />
+            ))}
           </div>
-
-          {filteredGroups.filter((group) => group.isJoined).length === 0 && (
+          
+          {filteredGroups.filter(group => group.isJoined).length === 0 && (
             <div className="flex flex-col items-center justify-center py-12">
               <Users className="h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-medium">You haven't joined any groups yet</h3>
@@ -184,14 +179,14 @@ export default function CollaborationPage() {
   )
 }
 
-function GroupCard({ group, index }: { group: any; index: number }) {
+function GroupCard({ group, index }: { group: any, index: number }) {
   const [isJoined, setIsJoined] = useState(group.isJoined)
-
+  
   const handleJoinLeave = () => {
     setIsJoined(!isJoined)
     // In a real app, this would make an API call
   }
-
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -221,7 +216,11 @@ function GroupCard({ group, index }: { group: any; index: number }) {
           <Button variant="outline" size="sm" asChild>
             <Link href={`/collaboration/groups/${group.id}`}>View Details</Link>
           </Button>
-          <Button variant={isJoined ? "outline" : "default"} size="sm" onClick={handleJoinLeave}>
+          <Button 
+            variant={isJoined ? "outline" : "default"} 
+            size="sm"
+            onClick={handleJoinLeave}
+          >
             {isJoined ? "Leave" : "Join"}
           </Button>
         </CardFooter>

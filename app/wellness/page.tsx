@@ -1,7 +1,6 @@
-export default function WellnessPage() {
-  return (
-    <h1 className="text-2xl font-semibold md:text-3xl">
-      Wellness Center - Coming Soon
-    </h1>
-  );
+// import { WellnessHub } from "@/components/wellness-hub"
+
+export default function Wellness() {
+  // return <WellnessHub />
+  return <>Not completed</>
 }

@@ -2,11 +2,14 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css"; // Standard Next.js global CSS
-import Sidebar from "@/components/layout/sidebar"; // Custom sidebar component
-import Header from "@/components/layout/header"; // Custom header component
+
 import { cn } from "@/lib/utils"; // Utility for conditional classNames (from shadcn/ui setup)
 import SessionProvider from "@/components/providers/session-provider"; // Import the provider
-
+import { ThemeProvider } from "@/components/theme-provider"
+import { MainNav } from "@/components/main-nav"
+import { UserNav } from "@/components/user-nav"
+import { Toaster } from "@/components/ui/sonner"
+ 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
@@ -29,15 +32,25 @@ export default function RootLayout({
       >
         {/* Wrap the entire content with SessionProvider */}
         <SessionProvider>
-          <div className="flex min-h-screen w-full">
-            <Sidebar />
-            <div className="flex flex-1 flex-col">
-              <Header />
-              <main className="flex-1 p-6 md:p-8 lg:p-10">
-                {children}
-              </main>
-            </div>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="flex min-h-screen flex-col">
+            <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="flex h-16 items-center px-4 sm:px-6">
+                <MainNav />
+                <div className="ml-auto flex items-center space-x-4">
+                  <UserNav />
+                </div>
+              </div>
+            </header>
+            <main className="flex-1">{children}</main>
           </div>
+          <Toaster />
+        </ThemeProvider>
         </SessionProvider>
       </body>
     </html>

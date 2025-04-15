@@ -1,7 +1,5 @@
-export default function InnovationPage() {
-  return (
-    <h1 className="text-2xl font-semibold md:text-3xl">
-      Innovation Hub - Coming Soon
-    </h1>
-  );
+import { InnovationHub } from "@/components/innovation-hub"
+
+export default function Innovation() {
+  return <InnovationHub />
 }
