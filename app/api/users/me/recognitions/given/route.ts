@@ -1,4 +1,4 @@
-// app/api/users/me/recognitions/received/route.ts
+// app/api/users/me/recognitions/given/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         const skip = (page - 1) * limit;
 
         const whereClause: Prisma.RecognitionWhereInput = {
-            recipientId: userId, // Filter by the logged-in user as recipient
+            giverId: userId, // Filter by the logged-in user as giver
         };
 
         const recognitions = await prisma.recognition.findMany({
@@ -37,14 +37,14 @@ export async function GET(request: NextRequest) {
             skip: skip,
             take: limit,
             orderBy: { createdAt: 'desc' },
-            include: { // Include giver details
-                giver: {
+            include: { // Include recipient details
+                recipient: {
                     select: { id: true, name: true, image: true }
                 },
-                badgeAwarded: {
+                 badgeAwarded: {
                     select: { id: true, name: true, imageUrl: true }
                 }
-                // recipient is the logged-in user, no need to include self again
+                // giver is the logged-in user, no need to include self again
             }
         });
 
@@ -57,13 +57,13 @@ export async function GET(request: NextRequest) {
         });
 
     } catch (error) {
-        console.error('List Received Recognitions Error:', error);
+        console.error('List Given Recognitions Error:', error);
          if (error instanceof z.ZodError) {
              return NextResponse.json({ message: 'Invalid query parameters', errors: error.flatten().fieldErrors }, { status: 400 });
         }
-         if (!await getAuthenticatedUserId()) {
+        if (!await getAuthenticatedUserId()) {
              return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ message: 'An error occurred fetching received recognitions' }, { status: 500 });
+        return NextResponse.json({ message: 'An error occurred fetching given recognitions' }, { status: 500 });
     }
 }
