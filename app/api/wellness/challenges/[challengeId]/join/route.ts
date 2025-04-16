@@ -43,14 +43,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     const now = new Date();
-    // Allow joining if challenge is active or upcoming? Decide on rules. Let's allow joining active only.
-    if (now < challenge.startDate || now > challenge.endDate) {
+    // Allow joining if challenge is active
+    if (now < challenge.startDate) {
+      // Check if not started yet
       return NextResponse.json(
-        { message: "Challenge is not currently active for joining" },
-        { status: 400 }
+        {
+          message: `Challenge has not started yet (starts ${challenge.startDate.toLocaleDateString()})`,
+        },
+        { status: 400 } // Bad Request - cannot join yet
       );
     }
-
+    if (now > challenge.endDate) {
+      // Check if already ended
+      return NextResponse.json(
+        {
+          message: `Challenge has already ended (ended ${challenge.endDate.toLocaleDateString()})`,
+        },
+        { status: 400 } // Bad Request - cannot join anymore
+      );
+    }
     // 2. Attempt to create the participant record
     const newParticipant = await prisma.challengeParticipant.create({
       data: {
@@ -76,14 +87,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       // Check for unique constraint violation (user already joined)
       if (
-        error.code === "P2002" &&
-        (error.meta?.target as string[])?.includes("userId") &&
-        (error.meta?.target as string[])?.includes("wellnessChallengeId")
+        error.code === "P2002" && // Error code is P2002
+        (error.meta?.target as string[])?.includes("userId") && // Constraint involves userId
+        (error.meta?.target as string[])?.includes("wellnessChallengeId") // Constraint involves wellnessChallengeId
       ) {
+        // --- THIS CODE BLOCK IS NOW RUNNING ---
         return NextResponse.json(
           { message: "You are already participating in this challenge" },
-          { status: 409 }
-        ); // Conflict
+          { status: 409 } // Conflict
+        );
       }
       // Handle foreign key constraint fail if challenge check was skipped
       if (

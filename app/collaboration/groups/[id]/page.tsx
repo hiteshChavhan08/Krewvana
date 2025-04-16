@@ -1,292 +1,258 @@
+// app/collaboration/groups/[id]/page.tsx
 "use client";
 
-import type React from "react";
-
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  Calendar,
-  MessageSquare,
-  MoreHorizontal,
-  Share,
-  Users,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-// import { useToast } from "@/hooks/use-toast"
 import { toast } from "sonner";
-import { Description } from "@radix-ui/react-dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion } from "framer-motion";
+import { ArrowLeft, Calendar, MessageSquare, MoreHorizontal, Share, Users, Loader2 ,Terminal} from "lucide-react"; // Added Loader2
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
+import { Alert,AlertTitle,AlertDescription} from "@/components/ui/alert"
 
-// Mock group data
-const groupData = {
-  "1": {
-    id: "1",
-    name: "Product Design",
-    type: "Interest",
-    description:
-      "A group for discussing product design principles, tools, and trends. Share your work, get feedback, and learn from others in the field.",
-    memberCount: 24,
-    isJoined: false,
-    image: "/placeholder.svg?height=80&width=80",
-    createdAt: "3 months ago",
-    members: [
-      {
-        id: "1",
-        name: "Alex Johnson",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "AJ",
-        role: "Admin",
-      },
-      {
-        id: "2",
-        name: "Maria Garcia",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "MG",
-        role: "Member",
-      },
-      {
-        id: "3",
-        name: "Taylor Kim",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "TK",
-        role: "Member",
-      },
-      {
-        id: "4",
-        name: "Jordan Lee",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "JL",
-        role: "Member",
-      },
-      {
-        id: "5",
-        name: "Casey Morgan",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "CM",
-        role: "Member",
-      },
-    ],
-    posts: [
-      {
-        id: "1",
-        author: {
-          id: "1",
-          name: "Alex Johnson",
-          avatar: "/placeholder.svg?height=40&width=40",
-          initials: "AJ",
-        },
-        content:
-          "Just shared a new design system documentation in the files section. Would love your feedback!",
-        createdAt: "2 days ago",
-        likes: 8,
-        comments: 3,
-      },
-      {
-        id: "2",
-        author: {
-          id: "2",
-          name: "Maria Garcia",
-          avatar: "/placeholder.svg?height=40&width=40",
-          initials: "MG",
-        },
-        content:
-          "Has anyone tried the new Figma plugins for accessibility? I'm looking for recommendations.",
-        createdAt: "1 week ago",
-        likes: 5,
-        comments: 7,
-      },
-    ],
-    events: [
-      {
-        id: "1",
-        title: "Design Review Session",
-        date: "Tomorrow, 2:00 PM",
-        location: "Meeting Room 3 / Zoom",
-        attendees: 12,
-      },
-      {
-        id: "2",
-        title: "UX Workshop",
-        date: "Next Tuesday, 10:00 AM",
-        location: "Conference Room A",
-        attendees: 18,
-      },
-    ],
-  },
-  "2": {
-    id: "2",
-    name: "Frontend Development",
-    type: "Interest",
-    description:
-      "Share knowledge about frontend frameworks, CSS tricks, and web performance. Ask questions, share resources, and collaborate on projects.",
-    memberCount: 42,
-    isJoined: true,
-    image: "/placeholder.svg?height=80&width=80",
-    createdAt: "1 year ago",
-    members: [
-      {
-        id: "5",
-        name: "Casey Morgan",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "CM",
-        role: "Admin",
-      },
-      {
-        id: "2",
-        name: "Maria Garcia",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "MG",
-        role: "Member",
-      },
-      {
-        id: "3",
-        name: "Taylor Kim",
-        avatar: "/placeholder.svg?height=40&width=40",
-        initials: "TK",
-        role: "Member",
-      },
-    ],
-    posts: [
-      {
-        id: "1",
-        author: {
-          id: "5",
-          name: "Casey Morgan",
-          avatar: "/placeholder.svg?height=40&width=40",
-          initials: "CM",
-        },
-        content:
-          "Just published a blog post about React performance optimizations. Check it out and let me know what you think!",
-        createdAt: "3 days ago",
-        likes: 15,
-        comments: 6,
-      },
-    ],
-    events: [
-      {
-        id: "1",
-        title: "JavaScript Meetup",
-        date: "This Friday, 5:00 PM",
-        location: "Cafeteria / Zoom",
-        attendees: 24,
-      },
-    ],
-  },
+// --- Define Types based on API responses ---
+type GroupDetail = {
+    id: string;
+    name: string;
+    description: string | null;
+    type: string; // Consider 'INTEREST' | 'PROJECT' | 'TEAM'
+    isPublic: boolean;
+    createdAt: string; // Assuming API returns ISO string date
+    isJoined: boolean; // Added by the GET /api/groups/[id] endpoint
+    image?: string | null; // Optional image
+    _count: {
+        members: number;
+        posts: number;
+    };
 };
+
+type PostAuthor = {
+    id: string;
+    name: string | null;
+    image: string | null;
+};
+
+type Post = {
+    id: string;
+    title: string | null;
+    content: string;
+    isAnnouncement: boolean;
+    createdAt: string; // Assuming API returns ISO string date
+    author: PostAuthor;
+    _count: {
+        comments: number;
+    };
+};
+
+type PostApiResponse = { // Type for the posts list endpoint response
+    data: Post[];
+    pagination: { /* ... pagination details ... */ };
+}
+
+// --- End Types ---
+
 
 export default function GroupDetailPage() {
   const params = useParams();
   const router = useRouter();
-  // const { toast } = useToast()
-  const [group, setGroup] = useState<any>(null);
-  const [isJoined, setIsJoined] = useState(false);
+  const groupId = params.id as string; // Get groupId once
+
+  // State variables with types
+  const [group, setGroup] = useState<GroupDetail | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isJoined, setIsJoined] = useState<boolean | null>(null); // Start as null to differentiate from false
   const [newPost, setNewPost] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [isJoiningOrLeaving, setIsJoiningOrLeaving] = useState(false);
+  const [loadingGroup, setLoadingGroup] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [errorGroup, setErrorGroup] = useState<string | null>(null);
+  const [errorPosts, setErrorPosts] = useState<string | null>(null);
 
-  useEffect(() => {
-    // In a real app, this would be an API call
-    const groupId = params.id as string;
-    const fetchedGroup = groupData[groupId as keyof typeof groupData];
-
-    if (fetchedGroup) {
-      setGroup(fetchedGroup);
-      setIsJoined(fetchedGroup.isJoined);
-    } else {
-      // Handle group not found
-      router.push("/collaboration");
+  // --- Data Fetching Callbacks ---
+  const fetchGroupData = useCallback(async () => {
+    if (!groupId) return;
+    setLoadingGroup(true);
+    setErrorGroup(null);
+    try {
+      // --- Corrected Endpoint ---
+      const res = await fetch(`/api/groups/${groupId}`);
+      if (!res.ok) {
+         const errorData = await res.json().catch(() => ({})); // Try to get error message
+         throw new Error(errorData.message || `Failed to fetch group data (Status: ${res.status})`);
+      }
+      const data: GroupDetail = await res.json();
+      setGroup(data);
+      setIsJoined(data.isJoined ?? false); // Set initial join status from fetched data
+    } catch (error: any) {
+      console.error("Fetch Group Data Error:", error);
+      setErrorGroup(error.message || "Failed to load group details.");
+      // Optional: Redirect if group fetch fundamentally fails (e.g., 404)
+      // if (error.message.includes('404') || error.message.includes('not found')) {
+      //    toast.error("Group not found.");
+      //    router.push("/collaboration");
+      // }
+    } finally {
+      setLoadingGroup(false);
     }
-  }, [params.id, router]);
+  }, [groupId]); // Depend only on groupId
 
-  const handleJoinLeave = () => {
-    // In a real app, this would make an API call
-    setIsJoined(!isJoined);
+  const fetchGroupPosts = useCallback(async () => {
+    if (!groupId) return;
+    setLoadingPosts(true);
+    setErrorPosts(null);
+    try {
+      // Fetch posts (assuming pagination might be added later)
+      const res = await fetch(`/api/groups/${groupId}/posts?limit=50`); // Fetch more posts initially
+      if (!res.ok) {
+         const errorData = await res.json().catch(() => ({}));
+         throw new Error(errorData.message || `Failed to fetch posts (Status: ${res.status})`);
+      }
+      const data: PostApiResponse = await res.json(); // Expect { data: [], pagination: {} }
+       if (!Array.isArray(data?.data)) {
+           throw new Error("Invalid post data received from server.");
+       }
+      setPosts(data.data);
+    } catch (error: any) {
+      console.error("Fetch Posts Error:", error);
+      setErrorPosts(error.message || "Failed to load posts.");
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, [groupId]); // Depend only on groupId
 
-    toast.message(isJoined ? "Left group" : "Joined group", {
-      description: isJoined
-        ? `You have left the ${group?.name} group`
-        : `You have joined the ${group?.name} group`,
-    });
+  // --- Initial Data Fetch Effect ---
+  useEffect(() => {
+    fetchGroupData();
+    fetchGroupPosts();
+  }, [fetchGroupData, fetchGroupPosts]); // Use the memoized functions as dependencies
+
+  // --- Action Handlers ---
+  const handleJoinLeave = async () => {
+    if (!group || isJoiningOrLeaving) return; // Prevent action if no group or already processing
+
+    setIsJoiningOrLeaving(true);
+    const wasJoined = isJoined; // Store current state before API call
+    const endpoint = wasJoined ? `/api/groups/${groupId}/leave` : `/api/groups/${groupId}/join`;
+    // --- These API endpoints (/join, /leave) NEED TO BE CREATED ---
+
+    try {
+        console.log(`Attempting to ${wasJoined ? 'leave' : 'join'} group: ${groupId}`);
+        // ** MOCK API CALL - REPLACE WITH ACTUAL FETCH **
+        await new Promise(resolve => setTimeout(resolve, 700));
+        // const res = await fetch(endpoint, { method: 'POST' }); // Use POST or DELETE as appropriate
+        // if (!res.ok) {
+        //     const errorData = await res.json().catch(() => ({}));
+        //     throw new Error(errorData.message || `Failed to ${wasJoined ? 'leave' : 'join'}`);
+        // }
+        // ** END MOCK API CALL **
+
+        // --- Update state on SUCCESS ---
+        const newJoinedState = !wasJoined;
+        setIsJoined(newJoinedState);
+        toast.success(newJoinedState ? `Successfully joined ${group.name}` : `Successfully left ${group.name}`);
+
+        // Optimistically update member count (or refetch group data)
+        setGroup(prevGroup => prevGroup ? ({
+             ...prevGroup,
+             _count: {
+                 ...prevGroup._count,
+                 members: prevGroup._count.members + (newJoinedState ? 1 : -1)
+             }
+        }) : null);
+
+    } catch (error: any) {
+      console.error(`Error ${wasJoined ? 'leaving' : 'joining'} group:`, error);
+      toast.error(error.message || `Failed to ${wasJoined ? 'leave' : 'join'}. Please try again.`);
+      // Optional: Revert optimistic UI update if API call failed
+      // setIsJoined(wasJoined);
+    } finally {
+      setIsJoiningOrLeaving(false);
+    }
   };
 
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newPost.trim() || !group) return;
 
-    if (!newPost.trim()) {
-      // toast({
-      //   title: "Error",
-      //   description: "Please enter a message",
-      //   variant: "destructive",
-      // })
-      toast.error("Please enter a message");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    // Simulate API call
+    setIsSubmittingPost(true);
     try {
-      // In a real app, this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Update local state with new post
-      const newPostObj = {
-        id: `temp-${Date.now()}`,
-        author: {
-          id: "current-user",
-          name: "John Doe",
-          avatar: "/placeholder.svg?height=40&width=40",
-          initials: "JD",
-        },
-        content: newPost,
-        createdAt: "Just now",
-        likes: 0,
-        comments: 0,
-      };
-
-      setGroup({
-        ...group,
-        posts: [newPostObj, ...group.posts],
+      const res = await fetch(`/api/groups/${groupId}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newPost }),
       });
 
-      setNewPost("");
+      if (!res.ok) {
+         const errorData = await res.json().catch(() => ({}));
+         throw new Error(errorData.message || `Failed to publish post (Status: ${res.status})`);
+      }
+
+      const createdPost: Post = await res.json(); // Expect the created post back
+
+      // Add to the beginning of the posts list
+      setPosts(prevPosts => [createdPost, ...prevPosts]);
+      setNewPost(""); // Clear textarea
       toast.success("Your post has been published");
-    } catch (error) {
-      toast.error("Failed to publish post. Please try again.");
+
+    } catch (error: any) {
+      console.error("Submit Post Error:", error);
+      toast.error(error.message || "Failed to publish post. Please try again.");
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingPost(false);
     }
   };
 
-  if (!group) {
+
+  // --- Render Logic ---
+
+  // Loading state for the main group details
+  if (loadingGroup) {
     return (
-      <div className="container py-8">
-        <div className="flex items-center justify-center h-[60vh]">
-          <p>Loading group details...</p>
-        </div>
+      <div className="container py-8 animate-pulse">
+         {/* Back button skeleton */}
+         <Skeleton className="h-8 w-32 mb-4" />
+         {/* Header card skeleton */}
+         <Card className="mb-6">
+             <CardHeader className="pb-2"><Skeleton className="h-24 w-full" /></CardHeader>
+             <CardContent><Skeleton className="h-6 w-3/4" /></CardContent>
+         </Card>
+         {/* Tabs skeleton */}
+         <Skeleton className="h-10 w-48 mb-4" />
+         {/* Post area skeleton */}
+         <Card><CardContent className="pt-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
       </div>
     );
   }
 
+  // Error state if group failed to load
+  if (errorGroup || !group) {
+      return (
+          <div className="container py-8 text-center">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mb-4 mr-auto" // Align left
+                    onClick={() => router.push("/collaboration")}
+                >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Groups
+                </Button>
+                <div className="flex flex-col items-center justify-center h-[50vh]">
+                    <h2 className="text-xl font-semibold text-destructive mb-2">Error Loading Group</h2>
+                    <p className="text-muted-foreground">{errorGroup || "Could not load group details."}</p>
+                </div>
+          </div>
+      );
+  }
+
+
+  // Main Render (Group loaded successfully)
   return (
     <div className="container py-8">
       <Button
@@ -304,48 +270,58 @@ export default function GroupDetailPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
+        {/* Group Header Card */}
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage
-                    src={group.image || "/placeholder.svg"}
-                    alt={group.name}
-                  />
-                  <AvatarFallback>{group.name.substring(0, 2)}</AvatarFallback>
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+              <div className="flex items-center gap-4 flex-grow min-w-0">
+                <Avatar className="h-16 w-16 flex-shrink-0">
+                   {/* Safe access to optional image */}
+                  <AvatarImage src={group.image ?? undefined} alt={group.name} />
+                  <AvatarFallback>{group.name?.substring(0, 2).toUpperCase() ?? 'Gr'}</AvatarFallback>
                 </Avatar>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-2xl">{group.name}</CardTitle>
-                    <Badge variant="outline">{group.type}</Badge>
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap"> {/* Allow wrap */}
+                    <CardTitle className="text-2xl break-words">{group.name}</CardTitle> {/* Allow break */}
+                     <Badge variant="outline" className="flex-shrink-0">{group.type}</Badge>
                   </div>
+                   {/* Safe access to counts and date */}
                   <CardDescription className="mt-1">
-                    {group.memberCount} members · Created {group.createdAt}
+                     {group._count?.members ?? 0} members · Created {group.createdAt ? new Date(group.createdAt).toLocaleDateString() : 'N/A'}
                   </CardDescription>
                 </div>
               </div>
-              <Button
-                variant={isJoined ? "outline" : "default"}
-                onClick={handleJoinLeave}
-              >
-                {isJoined ? "Leave Group" : "Join Group"}
-              </Button>
+              {/* Show Join/Leave only when status is known */}
+              {isJoined !== null && (
+                 <Button
+                    variant={isJoined ? "outline" : "default"}
+                    onClick={handleJoinLeave}
+                    disabled={isJoiningOrLeaving}
+                    className="flex-shrink-0 mt-2 sm:mt-0" // Adjust margin
+                 >
+                    {isJoiningOrLeaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {isJoiningOrLeaving ? (isJoined ? 'Leaving...' : 'Joining...') : (isJoined ? 'Leave Group' : 'Join Group')}
+                 </Button>
+              )}
             </div>
           </CardHeader>
+           {/* Safe access to description */}
           <CardContent>
-            <p className="text-sm">{group.description}</p>
+            <p className="text-sm">{group.description || "No description provided."}</p>
           </CardContent>
         </Card>
 
+        {/* Tabs for Posts, Members, Events */}
         <Tabs defaultValue="posts" className="w-full">
           <TabsList className="mb-4">
-            <TabsTrigger value="posts">Posts</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="events">Events</TabsTrigger>
+            <TabsTrigger value="posts">Posts ({group._count?.posts ?? 0})</TabsTrigger>
+            <TabsTrigger value="members">Members ({group._count?.members ?? 0})</TabsTrigger>
+            <TabsTrigger value="events">Events</TabsTrigger> {/* Add count if available */}
           </TabsList>
 
+          {/* Posts Tab */}
           <TabsContent value="posts" className="space-y-4">
+            {/* Show Post form only if joined */}
             {isJoined && (
               <Card>
                 <form onSubmit={handleSubmitPost}>
@@ -355,186 +331,87 @@ export default function GroupDetailPage() {
                       className="min-h-[100px] resize-none"
                       value={newPost}
                       onChange={(e) => setNewPost(e.target.value)}
+                      disabled={isSubmittingPost}
                     />
                   </CardContent>
                   <CardFooter className="flex justify-end border-t pt-4">
-                    <Button type="submit" disabled={isSubmitting}>
-                      {isSubmitting ? "Posting..." : "Post"}
+                    <Button type="submit" disabled={isSubmittingPost}>
+                      {isSubmittingPost && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {isSubmittingPost ? "Posting..." : "Post"}
                     </Button>
                   </CardFooter>
                 </form>
               </Card>
             )}
-
-            {group.posts.map((post: any, index: number) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
-                <Card>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage
-                            src={post.author.avatar || "/placeholder.svg"}
-                            alt={post.author.name}
-                          />
-                          <AvatarFallback>
-                            {post.author.initials}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{post.author.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {post.createdAt}
-                          </div>
-                        </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">More options</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Share className="mr-2 h-4 w-4" />
-                            Share
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <MessageSquare className="mr-2 h-4 w-4" />
-                            Report
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">{post.content}</p>
-                  </CardContent>
-                  <CardFooter className="border-t pt-3 flex justify-between">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                    >
-                      👍 {post.likes}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                    >
-                      <MessageSquare className="mr-1 h-4 w-4" />
-                      {post.comments}
-                    </Button>
-                  </CardFooter>
+             {!isJoined && !group.isPublic && ( // Message if private and not joined
+                <Card className="text-center py-6">
+                    <CardDescription>You must join this private group to post or view content.</CardDescription>
                 </Card>
-              </motion.div>
-            ))}
+             )}
 
-            {group.posts.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <MessageSquare className="h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-medium">No posts yet</h3>
-                <p className="text-sm text-muted-foreground">
-                  Be the first to post in this group
-                </p>
-              </div>
+            {/* Posts List */}
+            {loadingPosts && (
+                 <div className="space-y-4">
+                     <Skeleton className="h-32 w-full rounded-lg" />
+                     <Skeleton className="h-32 w-full rounded-lg" />
+                 </div>
             )}
+            {!loadingPosts && errorPosts && (
+                 <Alert variant="destructive">
+                     <Terminal className="h-4 w-4" />
+                     <AlertTitle>Error Loading Posts</AlertTitle>
+                     <AlertDescription>{errorPosts}</AlertDescription>
+                 </Alert>
+            )}
+            {!loadingPosts && !errorPosts && posts.length === 0 && (
+                <Card className="text-center py-6">
+                     <CardDescription>No posts in this group yet.</CardDescription>
+                     {isJoined && <CardDescription className="mt-1">Why not start the conversation?</CardDescription> }
+                 </Card>
+            )}
+             {!loadingPosts && !errorPosts && posts.map((post) => (
+              <Card key={post.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={post.author?.image ?? undefined} />
+                        <AvatarFallback>{post.author?.name?.slice(0, 2).toUpperCase() ?? 'U'}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{post.author?.name ?? 'Unknown User'}</p>
+                         {/* Format date safely */}
+                        <p className="text-xs text-muted-foreground">{post.createdAt ? new Date(post.createdAt).toLocaleString() : ''}</p>
+                      </div>
+                    </div>
+                    {/* Add post actions dropdown here */}
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                   {/* Render content safely */}
+                  <p className="whitespace-pre-wrap">{post.content ?? ''}</p>
+                </CardContent>
+                 {/* Optional: Add comment count display */}
+                 <CardFooter className="flex justify-between text-sm text-muted-foreground border-t pt-3">
+                     <span>{post._count?.comments ?? 0} Comments</span>
+                     <div className="flex gap-4">
+                         <button className="flex items-center gap-1 hover:text-primary"><MessageSquare className="h-4 w-4" /> Comment</button>
+                         <button className="flex items-center gap-1 hover:text-primary"><Share className="h-4 w-4" /> Share</button>
+                     </div>
+                 </CardFooter>
+              </Card>
+            ))}
           </TabsContent>
 
+          {/* Members Tab Content (Placeholder) */}
           <TabsContent value="members">
-            <Card>
-              <CardHeader>
-                <CardTitle>Members ({group.memberCount})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {group.members.map((member: any) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage
-                            src={member.avatar || "/placeholder.svg"}
-                            alt={member.name}
-                          />
-                          <AvatarFallback>{member.initials}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{member.name}</div>
-                          {member.role === "Admin" && (
-                            <Badge variant="outline" className="text-xs">
-                              Admin
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        View Profile
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="pt-6"><p>Members list coming soon...</p></CardContent></Card>
           </TabsContent>
 
+          {/* Events Tab Content (Placeholder) */}
           <TabsContent value="events">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upcoming Events</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {group.events.map((event: any) => (
-                    <div
-                      key={event.id}
-                      className="flex items-start gap-4 border-b pb-4 last:border-0 last:pb-0"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-md border bg-muted">
-                        <Calendar className="h-6 w-6" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium">{event.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {event.date}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {event.location}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">
-                            {event.attendees} attending
-                          </span>
-                        </div>
-                      </div>
-                      <Button size="sm">RSVP</Button>
-                    </div>
-                  ))}
-
-                  {group.events.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <Calendar className="h-12 w-12 text-muted-foreground" />
-                      <h3 className="mt-4 text-lg font-medium">
-                        No upcoming events
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Check back later for new events
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+             <Card><CardContent className="pt-6"><p>Group events coming soon...</p></CardContent></Card>
           </TabsContent>
         </Tabs>
       </motion.div>

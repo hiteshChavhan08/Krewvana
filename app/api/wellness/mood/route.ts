@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ message: 'Invalid input', errors: validation.error.flatten().fieldErrors }, { status: 400 });
         }
         const { moodLevel, notes, date } = validation.data;
-
+        console.log(userId)
         const newMoodLog = await prisma.moodLog.create({
             data: {
                 userId: userId,
