@@ -2,16 +2,24 @@
 'use client';
 import { SessionProvider } from 'next-auth/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider as NextThemesProvider } from "next-themes"; // Import ThemeProvider
 import React from 'react';
 
-// Create a react query client
 const queryClient = new QueryClient();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
-        {children}
+        {/* Add ThemeProvider */}
+        <NextThemesProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange // Often recommended with framer-motion
+        >
+          {children}
+        </NextThemesProvider>
       </QueryClientProvider>
     </SessionProvider>
   );

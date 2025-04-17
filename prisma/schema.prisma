@@ -1,7 +1,8 @@
 // prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
-  // output   = "../node_modules/.prisma/client" // Usually not needed, but doesn't hurt
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -9,7 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Auth Models
+// --- Auth Models ---
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -24,6 +25,7 @@ model Account {
   id_token          String? @db.Text
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([provider, providerAccountId])
 }
 
@@ -41,17 +43,62 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String?   // For credentials provider
+  passwordHash  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // --- Add points field ---
+  points Int @default(0) // Default points to 0
+  // --- End Add ---
+
   accounts      Account[]
   sessions      Session[]
-  // Add app-specific fields later (role, points, etc.)
+  sentKudos     Kudos[]    @relation("KudosGiver")
+  receivedKudos Kudos[]    @relation("KudosReceiver")
+  PointLog      PointLog[]
 }
 
 model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+
   @@unique([identifier, token])
+}
+
+// --- Application Models ---
+
+model Kudos {
+  id        String   @id @default(cuid())
+  message   String   @db.Text // Use Text for potentially longer messages
+  createdAt DateTime @default(now())
+
+  // Relation to the User who gave the Kudos
+  giverId String
+  giver   User   @relation("KudosGiver", fields: [giverId], references: [id], onDelete: Cascade)
+
+  // Relation to the User who received the Kudos
+  receiverId String
+  receiver   User       @relation("KudosReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  PointLog   PointLog[]
+
+  @@index([createdAt]) // Index for sorting feed by time
+}
+
+// Optional but recommended: Add PointLog model for auditing later
+model PointLog {
+  id            String   @id @default(cuid())
+  pointsAwarded Int
+  reason        String // e.g., "Gave Kudos", "Received Kudos", "Admin Adjustment"
+  timestamp     DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade) // Relation to User
+
+  // Optional: Link back to the specific Kudos that generated the points
+  kudosId String?
+  kudos   Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull) // SetNull if Kudos is deleted, but point log remains
+
+  @@index([userId]) // Index for querying user's point history
+  @@index([timestamp]) // Index for sorting logs by time
 }
