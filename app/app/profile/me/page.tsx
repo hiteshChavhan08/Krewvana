@@ -21,16 +21,49 @@ import { format } from "date-fns"; // Date formatting
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { DotPattern } from "@/components/magicui/dot-pattern";
 import { cn } from "@/lib/utils"; // Ensure cn is available
-
+import { Badge as ShadcnBadge } from "@/components/ui/badge"; // Renamed import to avoid conflict if needed// Import Badge component
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"; // Import Tooltip
+import { Send, HeartHandshake, Sparkles, HelpCircle } from "lucide-react"; // Import badge icons
 // Import the type (adjust path)
 // import { UserProfile } from '@/types';
+// --- Ensure UserProfile type is defined correctly ---
+type BadgeData = {
+  // Define type for the nested badge data
+  id: string;
+  name: string;
+  description: string;
+  iconName: string | null;
+};
 
+type UserBadgeData = {
+  // Define type for items in the userBadges array
+  earnedAt: string;
+  badge: BadgeData;
+};
+
+type UserProfile = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  points: number;
+  createdAt: string;
+  userBadges?: UserBadgeData[]; // Use the defined type here
+};
+// --- End Type Definitions ---
 // Helper function for initials
 function getInitials(name?: string | null): string {
-    if (!name) return '?';
-    const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+  if (!name) return "?";
+  const names = name.split(" ");
+  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+  return (
+    names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)
+  ).toUpperCase();
 }
 
 // --- API Fetch Function ---
@@ -42,6 +75,28 @@ async function fetchUserProfile(): Promise<any> {
   }
   return response.json();
 }
+
+// --- Icon Mapping Helper ---
+const BadgeIcon = ({
+  iconName,
+  className,
+}: {
+  iconName: string | null;
+  className?: string;
+}) => {
+  const sizeClass = className || "h-4 w-4"; // Default size
+  switch (iconName) {
+    case "Send":
+      return <Send className={sizeClass} />;
+    case "HeartHandshake":
+      return <HeartHandshake className={sizeClass} />;
+    case "Sparkles":
+      return <Sparkles className={sizeClass} />;
+    // Add more cases for future badge icons
+    default:
+      return <HelpCircle className={sizeClass} />; // Default icon
+  }
+};
 
 export default function ProfilePage() {
   const { data: session } = useSession(); // Get session for query key if needed
@@ -106,6 +161,11 @@ export default function ProfilePage() {
           </AlertDescription>
         </Alert>
       </div>
+    );
+  }
+  if (!isLoading && !isError && !user) {
+    return (
+      <div className="container mx-auto py-8 px-4">User data not found.</div>
     );
   }
 
@@ -186,7 +246,7 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Badges Card (Placeholder) */}
+          {/* --- Badges Card (Updated) --- */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -195,21 +255,45 @@ export default function ProfilePage() {
               <Award className="h-5 w-5 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground pt-2">
-                {/* TODO: Implement Badge Display Logic */}
-                Badges feature coming soon!
-              </p>
-              {/* Example structure for later:
-                            <div className="flex flex-wrap gap-2 pt-2">
-                                {user.userBadges?.map(ub => (
-                                    <Badge key={ub.badge.id} variant="secondary" className="flex items-center gap-1">
-                                         <img src={ub.badge.iconUrl} alt={ub.badge.name} className="h-4 w-4"/>
-                                        {ub.badge.name}
-                                    </Badge>
-                                ))}
-                            </div> */}
+              {user?.userBadges && user.userBadges.length > 0 ? (
+                <TooltipProvider delayDuration={100}>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {user.userBadges.map(( UserBadge: UserBadgeData ) => (
+                      <Tooltip key={UserBadge.badge.id}>
+                        <TooltipTrigger>
+                          <ShadcnBadge
+                            variant="secondary"
+                            className="flex items-center gap-1.5 cursor-default px-2 py-1"
+                          >
+                            <BadgeIcon
+                              iconName={UserBadge.badge.iconName}
+                              className="h-3.5 w-3.5"
+                            />
+                            <span className="text-xs">{UserBadge.badge.name}</span>
+                          </ShadcnBadge>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-center">
+                          <p className="font-semibold">{UserBadge.badge.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {UserBadge.badge.description}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Earned: {format(new Date(UserBadge.earnedAt), "PP")}
+                          </p>{" "}
+                          {/* Pretty date */}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </TooltipProvider>
+              ) : (
+                <p className="text-sm text-muted-foreground pt-2">
+                  No badges earned yet. Keep contributing!
+                </p>
+              )}
             </CardContent>
           </Card>
+          {/* --- End Badges Card --- */}
         </div>
 
         {/* Other sections can be added later (e.g., Activity Feed) */}

@@ -10,6 +10,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- Enum for Shoutout Types ---
+enum ShoutoutType {
+  TEAM_WIN
+  PROJECT_MILESTONE
+  WORK_ANNIVERSARY // Consider privacy/consent for auto-posting these
+  LIFE_MILESTONE // e.g., New baby, marriage (requires user submission)
+  ACTIVITY_HIGHLIGHT // e.g., Successful event, volunteer work
+  GENERAL_PRAISE
+  OTHER
+}
+
 // --- Auth Models ---
 model Account {
   id                String  @id @default(cuid())
@@ -56,6 +67,14 @@ model User {
   sentKudos     Kudos[]    @relation("KudosGiver")
   receivedKudos Kudos[]    @relation("KudosReceiver")
   PointLog      PointLog[]
+
+  // --- Add relations for Learning & Innovation ---
+  submittedLearningResources LearningResource[] @relation("SubmittedByUser")
+  submittedInnovationIdeas   InnovationIdea[]   @relation("SubmittedByUser")
+  // --- End Add ---
+  userBadges                 UserBadge[]
+  shoutoutsSubmitted         Shoutout[]         @relation("SubmittedBy") // Shoutouts this user submitted
+  shoutoutsRelatedTo         Shoutout[]         @relation("RelatedUser") // Shoutouts where this user is mentioned/tagged
 }
 
 model VerificationToken {
@@ -101,4 +120,92 @@ model PointLog {
 
   @@index([userId]) // Index for querying user's point history
   @@index([timestamp]) // Index for sorting logs by time
+}
+
+// --- Learning Module ---
+model LearningResource {
+  id          String   @id @default(cuid())
+  title       String
+  url         String   @db.Text // URL to the resource
+  description String?  @db.Text // Optional description
+  submittedAt DateTime @default(now())
+  // approved    Boolean   @default(false) // Optional: Add later for admin approval workflow
+
+  // Relation to the user who submitted it
+  submittedById String
+  submittedBy   User   @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+
+  @@index([submittedAt])
+}
+
+// --- Innovation Module ---
+model InnovationIdea {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text // Detailed description of the idea
+  submittedAt DateTime @default(now())
+  // status      String    @default("Submitted") // Optional: Track status (Submitted, Reviewing, Approved, Implemented)
+
+  // Relation to the user who submitted it
+  submittedById String
+  submittedBy   User   @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+
+  @@index([submittedAt])
+}
+
+// --- Badge System Models ---
+
+// Represents the definition of an available badge
+model Badge {
+  id           String   @id @default(cuid())
+  name         String   @unique // e.g., "Kudos Giver", "Welcome Aboard"
+  description  String   @db.Text
+  iconName     String? // Optional: Name of a lucide-react icon or identifier for custom image
+  criteriaDesc String?  @db.Text // Optional: User-friendly description of how to earn it
+  createdAt    DateTime @default(now())
+
+  // Relation to users who have earned this badge
+  userBadges UserBadge[]
+
+  @@index([name])
+}
+
+// Join table connecting Users and the Badges they've earned
+model UserBadge {
+  id       String   @id @default(cuid())
+  earnedAt DateTime @default(now())
+
+  // Relation to User
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relation to Badge definition
+  badgeId String
+  badge   Badge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId]) // Ensure a user earns each badge only once
+  @@index([userId])
+  @@index([badgeId])
+}
+
+// --- Shoutout Model ---
+model Shoutout {
+  id        String       @id @default(cuid())
+  type      ShoutoutType // Use the enum
+  message   String       @db.Text
+  imageUrl  String?      @db.Text // Optional URL for an image
+  createdAt DateTime     @default(now())
+
+  // Optional: For specific types like milestones or team wins
+  relatedUserId String? // e.g., User celebrating anniversary
+  relatedUser   User?   @relation("RelatedUser", fields: [relatedUserId], references: [id], onDelete: SetNull) // Use a different relation name
+  // relatedTeamId String? // Link to a Team model if you add one later
+
+  // Relation to the User who submitted the shoutout
+  submittedById String
+  submittedBy   User   @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([relatedUserId])
 }

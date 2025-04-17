@@ -10,7 +10,26 @@ import { Prisma } from "@prisma/client"; // Import Prisma types for transaction
 // --- Constants for Points ---
 const POINTS_FOR_GIVING_KUDOS = 1; // Example value
 const POINTS_FOR_RECEIVING_KUDOS = 5; // Example value
+// --- Function to award a badge if not already earned ---
+async function awardBadge(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  badgeId: string
+) {
+  const existingBadge = await tx.userBadge.findUnique({
+    where: { userId_badgeId: { userId, badgeId } },
+  });
 
+  if (!existingBadge) {
+    await tx.userBadge.create({
+      data: { userId, badgeId },
+    });
+    console.log(`Awarded badge ${badgeId} to user ${userId}`);
+    // TODO: Add notification logic here later?
+    return true; // Indicate badge was awarded
+  }
+  return false; // Badge already existed
+}
 // --- GET Handler (Remains the same) ---
 export async function GET(request: Request) {
   // ... same GET logic as before ...
@@ -56,7 +75,7 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-
+    let awardedBadgesInfo: string[] = []; // Track awarded badges for logging/response
     // --- Use Prisma Transaction ---
     const result = await prisma.$transaction(async (tx) => {
       // 1. Verify receiver exists (within transaction for consistency)
@@ -121,11 +140,47 @@ export async function POST(request: Request) {
           kudosId: newKudos.id, // Link to the created Kudos
         },
       });
+      // --- 4. Check and Award Badges ---
+
+      // Giver: Check for "First Kudos Given" (ID: 'kudos_giver_1')
+      const giverKudosCount = await tx.kudos.count({
+        where: { giverId: giverId },
+      });
+      if (giverKudosCount === 1) {
+        // Award only on the very first one
+        const awarded = await awardBadge(tx, giverId, "kudos_giver_1");
+        if (awarded) awardedBadgesInfo.push("Giver earned 'First Kudos'");
+      }
+
+      // Receiver: Check for "First Kudos Received" (ID: 'kudos_receiver_1')
+      const receiverKudosCount = await tx.kudos.count({
+        where: { receiverId: receiverId },
+      });
+      if (receiverKudosCount === 1) {
+        // Award only on the very first one
+        const awarded = await awardBadge(tx, receiverId, "kudos_receiver_1");
+        if (awarded) awardedBadgesInfo.push("Receiver earned 'Appreciated'");
+      }
+
+      // Receiver: Check for "5 Kudos Received" (ID: 'kudos_receiver_5')
+      const KUDOS_RECEIVER_5_THRESHOLD = 5;
+      if (receiverKudosCount === KUDOS_RECEIVER_5_THRESHOLD) {
+        // Award when count hits exactly 5
+        const awarded = await awardBadge(tx, receiverId, "kudos_receiver_5");
+        if (awarded)
+          awardedBadgesInfo.push("Receiver earned 'Valued Colleague'");
+      }
+
+      // --- End Badge Awarding ---
       return newKudos; // Return the created Kudos object from the transaction
     }); // --- End Prisma Transaction ---
 
-    console.log(`Kudos created and points awarded: ${result.id}`);
-    return NextResponse.json(result, { status: 201 });
+    console.log(
+      `Kudos created: ${result.id}. Badges awarded: ${
+        awardedBadgesInfo.join(", ") || "None"
+      }`
+    );
+    return NextResponse.json(result, { status: 201 }); // Return Kudos object
   } catch (error: any) {
     if (error instanceof ZodError) {
       return NextResponse.json(

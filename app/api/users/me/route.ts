@@ -23,12 +23,22 @@ export async function GET(request: Request) {
         image: true,
         points: true,
         createdAt: true, // Optional: for "Member since"
-        // Later: Include badges relation
-        // userBadges: {
-        //   include: {
-        //     badge: true // Select badge details
-        //   }
-        // }
+        // --- Include UserBadges and nested Badge details ---
+        userBadges: {
+          orderBy: { earnedAt: 'desc' }, // Show most recent first
+          select: {
+            earnedAt: true,
+            badge: { // Select fields from the related Badge model
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                iconName: true, // Get the icon identifier
+              },
+            },
+          },
+        },
+        // --- End Include ---
       },
     });
 

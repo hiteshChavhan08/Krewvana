@@ -17,6 +17,8 @@ import {
   Users, // Icon for Leaderboard
   UserCircle, // Icon for Profile
   Settings, // Example for future settings
+  HeartPulseIcon,
+  Lightbulb
 } from "lucide-react";
 
 interface NavItem {
@@ -30,6 +32,9 @@ const navItems: NavItem[] = [
   { href: "/app/kudos", label: "Kudos Feed", icon: Award },
   { href: "/app/leaderboard", label: "Leaderboard", icon: Users },
   { href: "/app/profile/me", label: "My Profile", icon: UserCircle },
+  { href: "/app/wellness", label: "Wellness", icon: HeartPulseIcon },
+  { href: "/app/learning", label: "Learning", icon: Lightbulb },
+  { href: "/app/shoutouts", label: "Shoutouts", icon: Lightbulb },
   // Add more links like Settings later
   // { href: '/app/settings', label: 'Settings', icon: Settings },
 ];
