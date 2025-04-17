@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
+import { getAuthenticatedUserId, hasRequiredPlatformRole } from '@/lib/session';
+// import { Role } from '@/lib/generated/prisma/client';
 
 const querySchema = z.object({
     search: z.string().optional(),
@@ -77,5 +79,58 @@ export async function GET(request: NextRequest) {
              return NextResponse.json({ message: 'Invalid query parameters', errors: error.flatten().fieldErrors }, { status: 400 });
         }
         return NextResponse.json({ message: 'An error occurred listing courses' }, { status: 500 });
+    }
+}
+
+// --- POST Logic (Create Course) ---
+const courseCreateSchema = z.object({
+    title: z.string().min(3, "Title must be at least 3 characters").max(150),
+    description: z.string().max(5000).optional().nullable(),
+    source: z.string().max(100).optional().nullable(),
+    url: z.string().url("Invalid URL format").optional().nullable(),
+    imageUrl: z.string().url("Invalid image URL format").optional().nullable(),
+    difficulty: z.string().max(50).optional().nullable(),
+    tags: z.array(z.string().max(50)).max(10, "Maximum 10 tags").optional(),
+});
+
+export async function POST(request: NextRequest) {
+    try {
+        // --- Authorization: Admin Only ---
+        const isAdmin = await hasRequiredPlatformRole([Role.ADMIN]);
+        if (!isAdmin) {
+            return NextResponse.json({ message: 'Forbidden: You do not have permission to create courses.' }, { status: 403 });
+        }
+        // --- End Authorization ---
+
+        const body = await request.json();
+        const validation = courseCreateSchema.safeParse(body);
+
+        if (!validation.success) {
+            return NextResponse.json({ message: 'Invalid input', errors: validation.error.flatten().fieldErrors }, { status: 400 });
+        }
+
+        const { title, description, source, url, imageUrl, difficulty, tags } = validation.data;
+
+        const newCourse = await prisma.course.create({
+            data: {
+                title,
+                description,
+                source,
+                url,
+                imageUrl,
+                difficulty,
+                tags: tags || [], // Ensure tags is an array
+            },
+        });
+
+        return NextResponse.json(newCourse, { status: 201 }); // 201 Created
+
+    } catch (error) {
+        console.error('Create Course Error:', error);
+        if (error instanceof z.ZodError) { return NextResponse.json({ message: 'Invalid input', errors: error.flatten().fieldErrors }, { status: 400 }); }
+        if (error instanceof SyntaxError) { return NextResponse.json({ message: 'Invalid request body' }, { status: 400 }); }
+        if (!await getAuthenticatedUserId()) { return NextResponse.json({ message: 'Unauthorized' }, { status: 401 }); } // Re-check auth just in case
+
+        return NextResponse.json({ message: 'An error occurred creating the course' }, { status: 500 });
     }
 }
