@@ -1,8 +1,8 @@
 // app/app/profile/me/page.tsx
 "use client";
 
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -29,9 +29,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"; // Import Tooltip
 import { Send, HeartHandshake, Sparkles, HelpCircle } from "lucide-react"; // Import badge icons
-// Import the type (adjust path)
-// import { UserProfile } from '@/types';
-// --- Ensure UserProfile type is defined correctly ---
+import { Button } from "@/components/ui/button"; // Import Button
+import { Input } from "@/components/ui/input"; // Import Input
+import { Textarea } from "@/components/ui/textarea"; // Import Textarea
+import { Label } from "@/components/ui/label"; // Import Label
+import { toast } from "sonner"; // For notifications
+import { z, ZodError } from "zod"; // For client-side validation check (optional)
+
 type BadgeData = {
   // Define type for the nested badge data
   id: string;
@@ -53,7 +57,17 @@ type UserProfile = {
   image: string | null;
   points: number;
   createdAt: string;
+  hobbies: string | null; // Add new fields
+  favoriteFood: string | null;
+  askMeAbout: string | null;
   userBadges?: UserBadgeData[]; // Use the defined type here
+};
+
+type ProfileFormData = {
+  name: string;
+  hobbies: string;
+  favoriteFood: string;
+  askMeAbout: string;
 };
 // --- End Type Definitions ---
 // Helper function for initials
@@ -75,7 +89,25 @@ async function fetchUserProfile(): Promise<any> {
   }
   return response.json();
 }
-
+async function updateUserProfile(
+  data: Partial<ProfileFormData>
+): Promise<UserProfile> {
+  // Use Partial for updates
+  const response = await fetch("/api/users/me", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(
+      errorData.details?.[0]?.message ||
+        errorData.error ||
+        "Failed to update profile"
+    );
+  }
+  return response.json();
+}
 // --- Icon Mapping Helper ---
 const BadgeIcon = ({
   iconName,
@@ -97,16 +129,43 @@ const BadgeIcon = ({
       return <HelpCircle className={sizeClass} />; // Default icon
   }
 };
-
+const ClientProfileUpdateSchema = z.object({
+  name: z.string().min(1, "Name cannot be empty").max(100),
+  hobbies: z
+    .string()
+    .max(500, "Hobbies text too long")
+    .optional()
+    .or(z.literal("")),
+  favoriteFood: z
+    .string()
+    .max(100, "Favorite food text too long")
+    .optional()
+    .or(z.literal("")),
+  askMeAbout: z
+    .string()
+    .max(200, "Ask me about text too long")
+    .optional()
+    .or(z.literal("")),
+});
 export default function ProfilePage() {
+  const queryClient = useQueryClient();
   const { data: session } = useSession(); // Get session for query key if needed
   const userId = session?.user?.id;
+  const [isEditing, setIsEditing] = useState(false);
+  // State to hold form data during editing
+  const [formData, setFormData] = useState<ProfileFormData>({
+    name: "",
+    hobbies: "",
+    favoriteFood: "",
+    askMeAbout: "",
+  });
 
   const {
     data: user,
     isLoading,
     error,
     isError,
+    refetch,
   } = useQuery<any>({
     // Use UserProfile type later
     // Query key includes userId to refetch if user changes (though unlikely here)
@@ -115,7 +174,70 @@ export default function ProfilePage() {
     enabled: !!userId, // Only run query if userId is available
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
+  const mutation = useMutation({
+    mutationFn: updateUserProfile,
+    onSuccess: (updatedData) => {
+      toast.success("Profile Updated!");
+      // Update the query cache with the new data
+      queryClient.setQueryData(
+        ["userProfile", userId],
+        (oldData: UserProfile | undefined) => ({ ...oldData, ...updatedData })
+      );
+      setIsEditing(false); // Exit edit mode
+    },
+    onError: (error: Error) => {
+      toast.error("Update Failed", { description: error.message });
+    },
+  });
+  // --- Effect to populate form when editing starts or user data loads ---
+  useEffect(() => {
+    if (user && isEditing) {
+      setFormData({
+        name: user.name || "",
+        hobbies: user.hobbies || "",
+        favoriteFood: user.favoriteFood || "",
+        askMeAbout: user.askMeAbout || "",
+      });
+    }
+  }, [isEditing, user]);
 
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Client-side validation (optional, backend validates anyway)
+    try {
+      ClientProfileUpdateSchema.parse(formData);
+      // Prepare data for PUT (only send changed fields potentially, or all)
+      const dataToUpdate: Partial<ProfileFormData> = {};
+      if (formData.name !== (user?.name || ""))
+        dataToUpdate.name = formData.name;
+      if (formData.hobbies !== (user?.hobbies || ""))
+        dataToUpdate.hobbies = formData.hobbies;
+      if (formData.favoriteFood !== (user?.favoriteFood || ""))
+        dataToUpdate.favoriteFood = formData.favoriteFood;
+      if (formData.askMeAbout !== (user?.askMeAbout || ""))
+        dataToUpdate.askMeAbout = formData.askMeAbout;
+
+      if (Object.keys(dataToUpdate).length > 0) {
+        mutation.mutate(dataToUpdate);
+      } else {
+        toast.info("No changes detected.");
+        setIsEditing(false); // Exit edit mode if no changes
+      }
+    } catch (err: any) {
+      if (err instanceof ZodError) {
+        toast.error("Validation Error", { description: err.errors[0].message });
+      } else {
+        toast.error("Validation Error", { description: "Invalid data." });
+      }
+    }
+  };
   if (isLoading || !userId) {
     // Elegant Skeleton Loader
     return (
@@ -203,9 +325,25 @@ export default function ProfilePage() {
               {getInitials(user.name)}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <h1 className="text-3xl font-bold">{user.name || "User"}</h1>
-            <p className="text-muted-foreground">{user.email}</p>
+          <div className="flex-grow">
+            {/* Display Name or Input */}
+            {isEditing ? (
+              <div className="mb-2">
+                <Label htmlFor="name" className="text-xs font-semibold">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="text-3xl font-bold p-0 border-0 h-auto shadow-none focus-visible:ring-0"
+                />
+              </div>
+            ) : (
+              <h1 className="text-3xl font-bold">{user?.name || "User"}</h1>
+            )}
+            <p className="text-muted-foreground">{user?.email}</p>
             {user.createdAt && (
               <p className="text-sm text-muted-foreground mt-1 flex items-center">
                 <CalendarDays className="h-4 w-4 mr-1.5" />
@@ -213,6 +351,25 @@ export default function ProfilePage() {
               </p>
             )}
           </div>
+          {/* Edit/Cancel Buttons */}
+          {!isEditing ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+            >
+              Edit Profile
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsEditing(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+          )}
         </div>
 
         {/* Grid for Points and Badges */}
@@ -258,7 +415,7 @@ export default function ProfilePage() {
               {user?.userBadges && user.userBadges.length > 0 ? (
                 <TooltipProvider delayDuration={100}>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {user.userBadges.map(( UserBadge: UserBadgeData ) => (
+                    {user.userBadges.map((UserBadge: UserBadgeData) => (
                       <Tooltip key={UserBadge.badge.id}>
                         <TooltipTrigger>
                           <ShadcnBadge
@@ -269,11 +426,15 @@ export default function ProfilePage() {
                               iconName={UserBadge.badge.iconName}
                               className="h-3.5 w-3.5"
                             />
-                            <span className="text-xs">{UserBadge.badge.name}</span>
+                            <span className="text-xs">
+                              {UserBadge.badge.name}
+                            </span>
                           </ShadcnBadge>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs text-center">
-                          <p className="font-semibold">{UserBadge.badge.name}</p>
+                          <p className="font-semibold">
+                            {UserBadge.badge.name}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {UserBadge.badge.description}
                           </p>
@@ -294,6 +455,100 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
           {/* --- End Badges Card --- */}
+
+          {/* --- "Get to Know Me" Card --- */}
+          <Card className="md:col-span-2">
+            {" "}
+            {/* Span both columns */}
+            <CardHeader>
+              <CardTitle>About Me</CardTitle>
+              <CardDescription>
+                A little more about{" "}
+                {isEditing ? formData.name : user?.name || "me"}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                // --- Edit Form ---
+                <form onSubmit={handleSave} className="space-y-4">
+                  <div>
+                    <Label htmlFor="hobbies">Hobbies</Label>
+                    <Textarea
+                      id="hobbies"
+                      name="hobbies"
+                      value={formData.hobbies}
+                      onChange={handleInputChange}
+                      placeholder="What do you enjoy doing?"
+                      className="min-h-[80px]"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="favoriteFood">Favorite Food(s)</Label>
+                    <Input
+                      id="favoriteFood"
+                      name="favoriteFood"
+                      value={formData.favoriteFood}
+                      onChange={handleInputChange}
+                      placeholder="What's delicious?"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="askMeAbout">Ask Me About</Label>
+                    <Input
+                      id="askMeAbout"
+                      name="askMeAbout"
+                      value={formData.askMeAbout}
+                      onChange={handleInputChange}
+                      placeholder="e.g., dogs, baking, specific project..."
+                    />
+                  </div>
+                  <Button type="submit" disabled={mutation.isPending}>
+                    {mutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </form>
+              ) : (
+                // --- Display View ---
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <Label className="font-semibold text-muted-foreground">
+                      Hobbies
+                    </Label>
+                    <p className="whitespace-pre-wrap">
+                      {user?.hobbies || (
+                        <span className="italic text-muted-foreground/70">
+                          Not specified
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="font-semibold text-muted-foreground">
+                      Favorite Food(s)
+                    </Label>
+                    <p>
+                      {user?.favoriteFood || (
+                        <span className="italic text-muted-foreground/70">
+                          Not specified
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="font-semibold text-muted-foreground">
+                      Ask Me About
+                    </Label>
+                    <p>
+                      {user?.askMeAbout || (
+                        <span className="italic text-muted-foreground/70">
+                          Not specified
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Other sections can be added later (e.g., Activity Feed) */}
