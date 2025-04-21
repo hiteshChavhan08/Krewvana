@@ -1,53 +1,37 @@
+
 // prisma/seed.ts
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, MentorshipSkill } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const skillsToSeed: Omit<MentorshipSkill, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  { name: 'Advanced Slack Usage', description: 'Go beyond basic messaging: workflows, integrations, advanced search.' },
+  { name: 'AI Prompt Engineering Basics', description: 'Learn how to effectively interact with generative AI models like ChatGPT.' },
+  { name: 'Figma Fundamentals', description: 'Introduction to UI/UX design collaboration using Figma.' },
+  { name: 'Mastering Google Workspace', description: 'Tips and tricks for Gmail, Calendar, Drive, Docs, and Sheets.' },
+  { name: 'Effective Remote Collaboration', description: 'Tools and techniques for staying connected and productive while remote.' },
+  { name: 'Introduction to Next.js', description: 'Basics of building modern web applications with Next.js.' },
+  { name: 'Understanding Gen Z Communication', description: 'Insights into preferred communication styles and platforms.' },
+  { name: 'Cybersecurity Best Practices', description: 'Protecting yourself and the company from online threats.' },
+];
+
 async function main() {
-  console.log('Seeding initial badges...');
+  console.log(`Start seeding ...`);
 
-  const badgesToCreate = [
-    {
-      id: 'kudos_giver_1', // Use predictable IDs for logic checks
-      name: 'First Kudos',
-      description: 'You shared your first recognition!',
-      iconName: 'Send', // Example lucide-react icon name
-      criteriaDesc: 'Give your first Kudos to a colleague.',
-    },
-    {
-      id: 'kudos_receiver_1',
-      name: 'Appreciated',
-      description: "You've received your first Kudos!",
-      iconName: 'HeartHandshake',
-      criteriaDesc: 'Receive your first Kudos from a colleague.',
-    },
-    {
-      id: 'kudos_receiver_5',
-      name: 'Valued Colleague',
-      description: "You've received 5 Kudos!",
-      iconName: 'Sparkles',
-      criteriaDesc: 'Receive 5 Kudos from colleagues.',
-    },
-    // Add more badges later (e.g., for profile completion, participation)
-  ];
-
-  for (const badgeData of badgesToCreate) {
-    // Use upsert to avoid errors if seeding runs multiple times
-    // and to allow easy updates to badge descriptions etc.
-    await prisma.badge.upsert({
-      where: { id: badgeData.id },
-      update: {
-        name: badgeData.name,
-        description: badgeData.description,
-        iconName: badgeData.iconName,
-        criteriaDesc: badgeData.criteriaDesc,
-       },
-      create: badgeData,
-    });
-    console.log(` Upserted badge: ${badgeData.name}`);
+  for (const skillData of skillsToSeed) {
+    try {
+       const skill = await prisma.mentorshipSkill.upsert({
+         where: { name: skillData.name }, // Use name as the unique identifier for upsert
+         update: { description: skillData.description }, // Update description if name exists
+         create: skillData, // Create if name doesn't exist
+       });
+       console.log(`Upserted skill: ${skill.name} (ID: ${skill.id})`);
+    } catch (error) {
+        console.error(`Error upserting skill "${skillData.name}":`, error);
+    }
   }
 
-  console.log('Badge seeding finished.');
+  console.log(`Seeding finished.`);
 }
 
 main()

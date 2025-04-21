@@ -47,7 +47,13 @@ enum MembershipStatus {
 }
 
 // ++ End Enums for Mentorship ++
-
+// --- Enums for AMA ---
+enum AMASessionStatus {
+  UPCOMING
+  LIVE
+  ENDED
+  CANCELLED
+}
 // --- Auth Models ---
 model Account {
   id                String  @id @default(cuid())
@@ -102,10 +108,12 @@ model User {
   shoutoutsSubmitted         Shoutout[]         @relation("SubmittedBy")
   shoutoutsRelatedTo         Shoutout[]         @relation("RelatedUser")
 
-  // ++ Mentorship Relations ++
-  createdCircles    MentorshipCircle[]       @relation("CircleCreator") // Circles this user initially proposed
-  circleMemberships MentorshipCircleMember[] // Which circles they are a member of (as mentor or mentee)
-  // ++ End Mentorship Relations ++
+  createdCircles    MentorshipCircle[]       @relation("CircleCreator") 
+  circleMemberships MentorshipCircleMember[]
+  
+  hostedAMASessions     AMASession[]  @relation("HostedAMASessions")
+  submittedAMAQuestions AMAQuestion[] @relation("SubmittedAMAQuestions")
+  answeredAMAQuestions  AMAQuestion[] @relation("AnsweredAMAQuestions")
 }
 
 model VerificationToken {
@@ -292,3 +300,52 @@ model MentorshipCircleMember {
 //   @@index([circleId])
 //   @@index([giverId])
 // }
+// --- AMA Feature Models ---
+
+model AMASession {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?   @db.Text
+  scheduledAt   DateTime
+  status        AMASessionStatus @default(UPCOMING)
+  isTechSpecific Boolean  @default(false) 
+  topic         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  hostId        String
+  host          User      @relation("HostedAMASessions", fields: [hostId], references: [id], onDelete: Restrict) 
+
+  questions     AMAQuestion[]
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([hostId])
+}
+
+model AMAQuestion {
+  id            String    @id @default(cuid())
+  text          String    @db.Text 
+  isAnonymous   Boolean   @default(false)
+  isApproved    Boolean   @default(false)
+  answerText    String?   @db.Text
+  answeredAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+ 
+  sessionId     String
+  session       AMASession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  
+  submittedById String?
+  submittedBy   User?      @relation("SubmittedAMAQuestions", fields: [submittedById], references: [id], onDelete: SetNull) 
+
+  answeredById  String?  
+  answeredBy    User?      @relation("AnsweredAMAQuestions", fields: [answeredById], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([submittedById])
+  @@index([isApproved])
+  @@index([answeredAt])
+}
