@@ -18,6 +18,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; // For displaying users
 import Image from 'next/image'; // For displaying shoutout image
 import { ZodError } from 'zod';
+import { getInitials } from '@/lib/utils/helpers';
 
 // --- Type Definition (align with API response) ---
 type Shoutout = {
@@ -48,16 +49,6 @@ async function submitShoutout(data: ShoutoutCreateData): Promise<Shoutout> {
   }
   return res.json();
 }
-
-// Helper function for initials (same as in UserNav/KudosCard)
-function getInitials(name?: string | null): string {
-    if (!name) return "?";
-    const names = name.split(" ");
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (
-      names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)
-    ).toUpperCase();
-  }
 // Helper to format enum keys to readable strings
 function formatShoutoutType(type: ShoutoutType): string {
     return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');

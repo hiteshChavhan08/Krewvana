@@ -34,16 +34,11 @@ import { MemberList } from "@/components/member-list"; // Import Client Componen
 import { Separator } from "@/components/ui/separator"; // For visual separation
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const getInitials = (name?: string | null): string => {
-  if (!name?.trim()) return "??";
-  const names = name.trim().split(" ");
-  if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
-  return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-};
-
-// Type definition for badge variants for better type safety
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
+import {
+  getInitials,
+  getMentorshipStatusBadgeVariant,
+} from "@/lib/utils/helpers";
+import {formatShortDate} from '@/lib/utils/date-helpers'
 // --- Loading Skeleton for Detail Page ---
 function DetailPageSkeleton() {
   return (
@@ -83,29 +78,6 @@ function DetailPageSkeleton() {
   );
 }
 
-const getStatusBadgeVariant = (
-  status: MentorshipCircleStatus
-): BadgeVariant => {
-  switch (status) {
-    // Map ACTIVE to 'default' or 'secondary', we'll style it further with className
-    case MentorshipCircleStatus.ACTIVE:
-      return "default";
-    // Map FORMING to 'secondary'
-    case MentorshipCircleStatus.FORMING:
-    case MentorshipCircleStatus.PROPOSED:
-    case MentorshipCircleStatus.PENDING_APPROVAL:
-      return "secondary";
-    // Map COMPLETED to 'outline'
-    case MentorshipCircleStatus.COMPLETED:
-      return "outline";
-    // Map CANCELLED to 'destructive'
-    case MentorshipCircleStatus.CANCELLED:
-      return "destructive";
-    // Default fallback
-    default:
-      return "secondary";
-  }
-};
 const getStatusIcon = (status: MentorshipCircleStatus) => {
   switch (status) {
     case MentorshipCircleStatus.ACTIVE:
@@ -231,7 +203,7 @@ async function CircleDetailContent({ circleId }: { circleId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground mb-5">
           <Badge
-            variant={getStatusBadgeVariant(circle.status)}
+            variant={getMentorshipStatusBadgeVariant(circle.status)}
             className="capitalize text-xs inline-flex items-center"
           >
             {getStatusIcon(circle.status)}
@@ -250,11 +222,7 @@ async function CircleDetailContent({ circleId }: { circleId: string }) {
           <div className="inline-flex items-center">
             <Clock className="h-4 w-4 mr-1" />
             Created{" "}
-            {new Date(circle.createdAt).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            {formatShortDate(circle.createdAt)}
           </div>
         </div>
         {circle.description && (
@@ -320,7 +288,7 @@ export default async function CircleDetailPage({
 }: {
   params: { circleId: string };
 }) {
-  const { circleId } =  await params;
+  const { circleId } = await params;
   return (
     <Suspense fallback={<DetailPageSkeleton />}>
       <CircleDetailContent circleId={circleId} />

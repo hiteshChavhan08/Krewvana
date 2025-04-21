@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns'; // For relative time
+import { getInitials } from '@/lib/utils/helpers';
 
 // Define a type for the Kudos prop (adapt based on API response)
 type KudosProps = {
@@ -23,13 +24,6 @@ type KudosProps = {
     };
   };
 };
-
-function getInitials(name?: string | null): string {
-    if (!name) return '?';
-    const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
-}
 
 export function KudosCard({ kudos }: KudosProps) {
     const timeAgo = formatDistanceToNow(new Date(kudos.createdAt), { addSuffix: true });

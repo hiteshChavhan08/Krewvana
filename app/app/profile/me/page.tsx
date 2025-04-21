@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea"; // Import Textarea
 import { Label } from "@/components/ui/label"; // Import Label
 import { toast } from "sonner"; // For notifications
 import { z, ZodError } from "zod"; // For client-side validation check (optional)
+import { getInitials } from "@/lib/utils/helpers";
 
 type BadgeData = {
   // Define type for the nested badge data
@@ -70,15 +71,6 @@ type ProfileFormData = {
   askMeAbout: string;
 };
 // --- End Type Definitions ---
-// Helper function for initials
-function getInitials(name?: string | null): string {
-  if (!name) return "?";
-  const names = name.split(" ");
-  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-  return (
-    names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)
-  ).toUpperCase();
-}
 
 // --- API Fetch Function ---
 async function fetchUserProfile(): Promise<any> {

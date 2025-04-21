@@ -80,7 +80,10 @@ model Session {
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
+enum UserRole {
+  USER     // Regular user, default
+  ADMIN    // Platform administrator
+}
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -110,7 +113,7 @@ model User {
 
   createdCircles    MentorshipCircle[]       @relation("CircleCreator") 
   circleMemberships MentorshipCircleMember[]
-  
+  role UserRole @default(USER)
   hostedAMASessions     AMASession[]  @relation("HostedAMASessions")
   submittedAMAQuestions AMAQuestion[] @relation("SubmittedAMAQuestions")
   answeredAMAQuestions  AMAQuestion[] @relation("AnsweredAMAQuestions")

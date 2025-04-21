@@ -106,15 +106,6 @@ async function fetchRecentActivity(limit: number = 5): Promise<ActivityItem[]> {
   return combined.slice(0, limit);
 }
 
-// Helper function for initials (same as in UserNav/KudosCard)
-function getInitials(name?: string | null): string {
-  if (!name) return "?";
-  const names = name.split(" ");
-  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-  return (
-    names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)
-  ).toUpperCase();
-}
 // Helper to format enum keys to readable strings
 function formatShoutoutType(type: ShoutoutType): string {
   return type

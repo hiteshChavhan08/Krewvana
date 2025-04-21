@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal, Trophy } from "lucide-react"; // Icons
+import { getInitials } from "@/lib/utils/helpers";
 
 // Define the expected shape of a leaderboard user
 type LeaderboardUser = {
@@ -35,16 +36,6 @@ async function fetchLeaderboard(
     throw new Error("Failed to fetch leaderboard data");
   }
   return response.json();
-}
-
-// Helper function for initials (same as in UserNav/KudosCard)
-function getInitials(name?: string | null): string {
-  if (!name) return "?";
-  const names = name.split(" ");
-  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-  return (
-    names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)
-  ).toUpperCase();
 }
 
 export default function LeaderboardPage() {

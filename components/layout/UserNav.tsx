@@ -15,13 +15,8 @@ import {
 import { useSession, signOut } from "next-auth/react";
 import Link from 'next/link';
 import { LogOut, User as UserIcon } from 'lucide-react'; // Icons
+import { getInitials } from "@/lib/utils/helpers";
 
-function getInitials(name?: string | null): string {
-    if (!name) return '?';
-    const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
-}
 
 export default function UserNav() {
   const { data: session } = useSession();

@@ -35,6 +35,8 @@ const navItems: NavItem[] = [
   { href: "/app/wellness", label: "Wellness", icon: HeartPulseIcon },
   { href: "/app/learning", label: "Learning", icon: Lightbulb },
   { href: "/app/shoutouts", label: "Shoutouts", icon: Lightbulb },
+  { href: "/app/mentorship", label: "Mentorship", icon: Lightbulb },
+  { href: "/app/ama", label: "AMA", icon: Lightbulb },
   // Add more links like Settings later
   // { href: '/app/settings', label: 'Settings', icon: Settings },
 ];

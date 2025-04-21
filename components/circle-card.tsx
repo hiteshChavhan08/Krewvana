@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users, Clock, CheckCircle } from "lucide-react"; // Import icons
 import { MentorshipCircleStatus, MentorshipRole } from "@prisma/client";
+import { getInitials } from "@/lib/utils/helpers";
+import { formatShortDate } from "@/lib/utils/date-helpers";
 
 // Define a type for the circle data expected by the card
 // Adjust based on the actual data returned by your API endpoint
@@ -38,13 +40,6 @@ export type CircleCardData = {
   createdAt: string | Date; // Use string if serialized, Date otherwise
 };
 
-// Helper to get initials for Avatar fallback
-const getInitials = (name?: string | null) => {
-  if (!name) return "??";
-  const names = name.split(' ');
-  if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
-  return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-};
 
 // Helper for status badge styling
 const getStatusBadgeVariant = (status: MentorshipCircleStatus): "default" | "secondary" | "destructive" | "outline" => {
@@ -109,7 +104,7 @@ export function CircleCard({ circle }: CircleCardProps) {
            )}
         </CardContent>
         <CardFooter className="text-xs text-muted-foreground flex justify-between items-center">
-            <span>Created {new Date(circle.createdAt).toLocaleDateString()}</span>
+            <span>Created {formatShortDate(circle.createdAt)}</span>
             {/* Optionally add an icon or text indicating if user can join */}
         </CardFooter>
       </Card>
