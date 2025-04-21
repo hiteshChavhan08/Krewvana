@@ -1,9 +1,20 @@
-import Image from "next/image";
-import Link from 'next/link';
-export default function Home() {
+import HeroSection from "@/components/landing/HeroSection";
+import FeaturesSection from "@/components/landing/FeaturesSection";
+import CtaSection from "@/components/landing/CtaSection";
+import Footer from "@/components/landing/Footer";
+import WhySection from "@/components/landing/WhySection";
+
+export default function LandingPage() {
   return (
-    <>
-    <Link href="/app" className="flex items-center justify-center h-100">Use APP</Link>
-    </>
+    <div className="flex flex-col min-h-screen">
+      <main className="flex-grow">
+        <HeroSection />
+        <WhySection />
+        <FeaturesSection />
+        {/* Optional: Add HowItWorksSection here */}
+        <CtaSection />
+      </main>
+      <Footer />
+    </div>
   );
 }

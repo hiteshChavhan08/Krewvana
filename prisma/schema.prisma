@@ -2,6 +2,8 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Ensure this output path is correct relative to your prisma folder
+  // If prisma folder is at root, '../node_modules/.prisma/client' is likely correct
   output   = "../node_modules/.prisma/client"
 }
 
@@ -10,16 +12,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- Enum for Shoutout Types ---
+// --- Enums ---
 enum ShoutoutType {
   TEAM_WIN
   PROJECT_MILESTONE
-  WORK_ANNIVERSARY // Consider privacy/consent for auto-posting these
-  LIFE_MILESTONE // e.g., New baby, marriage (requires user submission)
-  ACTIVITY_HIGHLIGHT // e.g., Successful event, volunteer work
+  WORK_ANNIVERSARY
+  LIFE_MILESTONE
+  ACTIVITY_HIGHLIGHT
   GENERAL_PRAISE
   OTHER
 }
+
+// ++ Enums for Mentorship ++
+enum MentorshipCircleStatus {
+  PROPOSED // Mentor proposed, maybe pending admin review
+  PENDING_APPROVAL // Explicit admin review step (optional workflow)
+  FORMING // Approved/Created, open for mentees to join
+  ACTIVE // Mentorship is happening
+  COMPLETED // Mentorship concluded
+  CANCELLED // Cancelled before/during activity
+}
+
+enum MentorshipRole {
+  MENTOR
+  MENTEE
+}
+
+enum MembershipStatus {
+  PENDING // Requested to join (for MENTEE)
+  ACTIVE // Approved member
+  DECLINED // Request to join was declined
+  REMOVED // Was removed by mentor/admin
+  LEFT // Left voluntarily
+}
+
+// ++ End Enums for Mentorship ++
 
 // --- Auth Models ---
 model Account {
@@ -54,30 +81,31 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String?
+  passwordHash  String? // Assuming you might add credentials provider later
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // --- Add points field ---
-  points Int @default(0) // Default points to 0
-  // --- End Add ---
-  hobbies       String?   @db.Text // Allow longer text for hobbies
-  favoriteFood  String?
-  askMeAbout    String?   // e.g., "My dog, Star Wars trivia, baking sourdough"
+  // Engagement Features
+  points       Int     @default(0)
+  hobbies      String? @db.Text
+  favoriteFood String?
+  askMeAbout   String?
 
-  accounts      Account[]
-  sessions      Session[]
-  sentKudos     Kudos[]    @relation("KudosGiver")
-  receivedKudos Kudos[]    @relation("KudosReceiver")
-  PointLog      PointLog[]
-
-  // --- Add relations for Learning & Innovation ---
+  accounts                   Account[]
+  sessions                   Session[]
+  sentKudos                  Kudos[]            @relation("KudosGiver")
+  receivedKudos              Kudos[]            @relation("KudosReceiver")
+  PointLog                   PointLog[]
   submittedLearningResources LearningResource[] @relation("SubmittedByUser")
   submittedInnovationIdeas   InnovationIdea[]   @relation("SubmittedByUser")
-  // --- End Add ---
   userBadges                 UserBadge[]
-  shoutoutsSubmitted         Shoutout[]         @relation("SubmittedBy") // Shoutouts this user submitted
-  shoutoutsRelatedTo         Shoutout[]         @relation("RelatedUser") // Shoutouts where this user is mentioned/tagged
+  shoutoutsSubmitted         Shoutout[]         @relation("SubmittedBy")
+  shoutoutsRelatedTo         Shoutout[]         @relation("RelatedUser")
+
+  // ++ Mentorship Relations ++
+  createdCircles    MentorshipCircle[]       @relation("CircleCreator") // Circles this user initially proposed
+  circleMemberships MentorshipCircleMember[] // Which circles they are a member of (as mentor or mentee)
+  // ++ End Mentorship Relations ++
 }
 
 model VerificationToken {
@@ -91,125 +119,176 @@ model VerificationToken {
 // --- Application Models ---
 
 model Kudos {
-  id        String   @id @default(cuid())
-  message   String   @db.Text // Use Text for potentially longer messages
-  createdAt DateTime @default(now())
-
-  // Relation to the User who gave the Kudos
-  giverId String
-  giver   User   @relation("KudosGiver", fields: [giverId], references: [id], onDelete: Cascade)
-
-  // Relation to the User who received the Kudos
+  id         String     @id @default(cuid())
+  message    String     @db.Text
+  createdAt  DateTime   @default(now())
+  giverId    String
+  giver      User       @relation("KudosGiver", fields: [giverId], references: [id], onDelete: Cascade)
   receiverId String
   receiver   User       @relation("KudosReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
   PointLog   PointLog[]
 
-  @@index([createdAt]) // Index for sorting feed by time
+  @@index([createdAt])
 }
 
-// Optional but recommended: Add PointLog model for auditing later
 model PointLog {
   id            String   @id @default(cuid())
   pointsAwarded Int
-  reason        String // e.g., "Gave Kudos", "Received Kudos", "Admin Adjustment"
+  reason        String
   timestamp     DateTime @default(now())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kudosId       String?
+  kudos         Kudos?   @relation(fields: [kudosId], references: [id], onDelete: SetNull)
+  // Consider adding links to other point sources later (e.g., badge earned, circle participation)
+  // mentorshipCircleId String?
+  // mentorshipCircle MentorshipCircle? @relation(fields: [mentorshipCircleId], references: [id], onDelete: SetNull)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade) // Relation to User
-
-  // Optional: Link back to the specific Kudos that generated the points
-  kudosId String?
-  kudos   Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull) // SetNull if Kudos is deleted, but point log remains
-
-  @@index([userId]) // Index for querying user's point history
-  @@index([timestamp]) // Index for sorting logs by time
+  @@index([userId])
+  @@index([timestamp])
 }
 
-// --- Learning Module ---
 model LearningResource {
-  id          String   @id @default(cuid())
-  title       String
-  url         String   @db.Text // URL to the resource
-  description String?  @db.Text // Optional description
-  submittedAt DateTime @default(now())
-  // approved    Boolean   @default(false) // Optional: Add later for admin approval workflow
-
-  // Relation to the user who submitted it
+  id            String   @id @default(cuid())
+  title         String
+  url           String   @db.Text
+  description   String?  @db.Text
+  submittedAt   DateTime @default(now())
   submittedById String
-  submittedBy   User   @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+  submittedBy   User     @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
 
   @@index([submittedAt])
 }
 
-// --- Innovation Module ---
 model InnovationIdea {
-  id          String   @id @default(cuid())
-  title       String
-  description String   @db.Text // Detailed description of the idea
-  submittedAt DateTime @default(now())
-  // status      String    @default("Submitted") // Optional: Track status (Submitted, Reviewing, Approved, Implemented)
-
-  // Relation to the user who submitted it
+  id            String   @id @default(cuid())
+  title         String
+  description   String   @db.Text
+  submittedAt   DateTime @default(now())
   submittedById String
-  submittedBy   User   @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+  submittedBy   User     @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
 
   @@index([submittedAt])
 }
 
-// --- Badge System Models ---
-
-// Represents the definition of an available badge
 model Badge {
-  id           String   @id @default(cuid())
-  name         String   @unique // e.g., "Kudos Giver", "Welcome Aboard"
-  description  String   @db.Text
-  iconName     String? // Optional: Name of a lucide-react icon or identifier for custom image
-  criteriaDesc String?  @db.Text // Optional: User-friendly description of how to earn it
-  createdAt    DateTime @default(now())
-
-  // Relation to users who have earned this badge
-  userBadges UserBadge[]
+  id           String      @id @default(cuid())
+  name         String      @unique
+  description  String      @db.Text
+  iconName     String?
+  criteriaDesc String?     @db.Text
+  createdAt    DateTime    @default(now())
+  userBadges   UserBadge[]
 
   @@index([name])
 }
 
-// Join table connecting Users and the Badges they've earned
 model UserBadge {
   id       String   @id @default(cuid())
   earnedAt DateTime @default(now())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
-  // Relation to User
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Relation to Badge definition
-  badgeId String
-  badge   Badge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, badgeId]) // Ensure a user earns each badge only once
+  @@unique([userId, badgeId])
   @@index([userId])
   @@index([badgeId])
 }
 
-// --- Shoutout Model ---
 model Shoutout {
-  id        String       @id @default(cuid())
-  type      ShoutoutType // Use the enum
-  message   String       @db.Text
-  imageUrl  String?      @db.Text // Optional URL for an image
-  createdAt DateTime     @default(now())
-
-  // Optional: For specific types like milestones or team wins
-  relatedUserId String? // e.g., User celebrating anniversary
-  relatedUser   User?   @relation("RelatedUser", fields: [relatedUserId], references: [id], onDelete: SetNull) // Use a different relation name
-  // relatedTeamId String? // Link to a Team model if you add one later
-
-  // Relation to the User who submitted the shoutout
+  id            String       @id @default(cuid())
+  type          ShoutoutType
+  message       String       @db.Text
+  imageUrl      String?      @db.Text
+  createdAt     DateTime     @default(now())
+  relatedUserId String?
+  relatedUser   User?        @relation("RelatedUser", fields: [relatedUserId], references: [id], onDelete: SetNull)
   submittedById String
-  submittedBy   User   @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+  submittedBy   User         @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([type])
   @@index([relatedUserId])
 }
 
+// +++++++++++++++++++++++++++++++++++++++
+// +++ Reverse Mentorship Circles Models +++
+// +++++++++++++++++++++++++++++++++++++++
+
+model MentorshipSkill {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Advanced Slack Usage", "AI Prompt Engineering Basics"
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relation to Circles using this skill as the main topic
+  circles MentorshipCircle[]
+
+  @@index([name]) // Index for faster lookups by skill name
+}
+
+model MentorshipCircle {
+  id          String                 @id @default(cuid())
+  title       String // e.g., "Mastering Slack Shortcuts"
+  description String?                @db.Text
+  status      MentorshipCircleStatus @default(FORMING) // Defaults to FORMING when created via standard user flow
+  maxMentees  Int? // Optional limit on number of mentees
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  // The main topic/skill for this circle
+  skillId String
+  skill   MentorshipSkill @relation(fields: [skillId], references: [id], onDelete: Cascade) // Cascade delete if skill is deleted
+
+  // Who initially created/proposed this circle?
+  creatorId String
+  creator   User   @relation("CircleCreator", fields: [creatorId], references: [id], onDelete: Cascade) // Cascade delete if creator is deleted
+
+  // Members of this circle (mentors and mentees)
+  members MentorshipCircleMember[]
+
+  // Optional: Consider adding fields for schedule notes, meeting links etc. later
+  // scheduleNotes String?
+
+  @@index([status])
+  @@index([skillId])
+  @@index([creatorId])
+}
+
+model MentorshipCircleMember {
+  id       String           @id @default(cuid())
+  role     MentorshipRole // MENTOR or MENTEE
+  status   MembershipStatus @default(ACTIVE) // Mentors are active on creation, Mentees might be PENDING initially
+  joinedAt DateTime         @default(now())
+
+  // Relations
+  circleId String
+  circle   MentorshipCircle @relation(fields: [circleId], references: [id], onDelete: Cascade) // Cascade delete membership if circle is deleted
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade) // Cascade delete membership if user is deleted
+
+  // Ensure a user can only be in a specific circle once
+  @@unique([circleId, userId])
+  // Indexing for performance
+  @@index([userId])
+  @@index([circleId])
+  @@index([status]) // Index status for filtering members (e.g. find pending)
+}
+
+// Optional: For feedback later (can be added in a future migration)
+// model MentorshipFeedback {
+//   id        String   @id @default(cuid())
+//   rating    Int?     // e.g., 1-5
+//   comment   String?  @db.Text
+//   createdAt DateTime @default(now())
+//   circleId  String
+//   circle    MentorshipCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+//   giverId   String
+//   giver     User     @relation("FeedbackGiver", fields: [giverId], references: [id], onDelete: Cascade)
+//   // Optional: Link feedback to a specific interaction or the circle overall
+//   @@index([circleId])
+//   @@index([giverId])
+// }
