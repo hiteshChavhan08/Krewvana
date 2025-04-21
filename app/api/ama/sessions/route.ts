@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import { AMASessionStatus } from '@prisma/client';
+import { AMASessionStatus, UserRole } from '@prisma/client';
 
 // --- Zod Schema for Creating a Session ---
 const createSessionSchema = z.object({
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     }
 
     // --- Authorization Check: Admin Only ---
-    const isAdmin = false; // !!currentUser.isAdmin; // Replace with your actual admin check
+    const isAdmin = currentUser.role === UserRole.ADMIN; // !!currentUser.isAdmin; // Replace with your actual admin check
     if (!isAdmin) {
         return new NextResponse('Forbidden: Only admins can create AMA sessions', { status: 403 });
     }

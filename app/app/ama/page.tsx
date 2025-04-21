@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, HelpCircle, Users, Mic } from "lucide-react";
-import { AMASessionStatus } from "@prisma/client"; // Import enum if needed elsewhere
+import { AMASessionStatus, UserRole } from "@prisma/client"; // Import enum if needed elsewhere
 import { format } from "date-fns"; // For date formatting (npm install date-fns)
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getAMAStatusBadgeVariant, getInitials } from "@/lib/utils/helpers";
@@ -150,16 +150,16 @@ async function FetchAMAList({ status }: { status: AMASessionStatus }) {
     // --- CORRECTED FETCH URL using SERVER-SIDE ENV VAR ---
     const baseUrl = process.env.INTERNAL_APP_URL; // Read the server-side variable
     if (!baseUrl) {
-         // Handle case where env var is missing - essential for production
-         console.error("INTERNAL_APP_URL environment variable is not set.");
-         throw new Error("Application configuration error."); // Throw or return error alert
+      // Handle case where env var is missing - essential for production
+      console.error("INTERNAL_APP_URL environment variable is not set.");
+      throw new Error("Application configuration error."); // Throw or return error alert
     }
 
     const apiUrl = `${baseUrl}/api/ama/sessions?status=${status}&limit=9`;
     console.log(`Fetching AMA sessions from: ${apiUrl}`); // Log the full URL being fetched
 
     const response = await fetch(apiUrl, {
-        cache: 'no-store',
+      cache: "no-store",
     });
     // --- END CORRECTION ---
     if (!response.ok) {
@@ -210,10 +210,8 @@ async function FetchAMAList({ status }: { status: AMASessionStatus }) {
 
 // --- Main Page Component ---
 export default async function AMAPage() {
-  // TODO: Add "Create Session" button here if user is admin/host
-// Check if current user is admin (replace with actual logic)
-const currentUser = await getCurrentUser();
-const isAdmin = false; // !!currentUser?.isAdmin;
+  const currentUser = await getCurrentUser();
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">

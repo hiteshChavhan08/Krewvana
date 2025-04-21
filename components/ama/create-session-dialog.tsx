@@ -33,7 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils"; // For className merging
-import { format } from "date-fns";
+import { format, setHours, setMilliseconds, setMinutes, setSeconds } from "date-fns";
 import { Calendar as CalendarIcon, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -92,12 +92,13 @@ export function CreateSessionDialog({
 
   // --- Form Hook ---
   const {
-    register,
-    handleSubmit,
-    reset,
-    control, // Needed for Controller components (Calendar, Select)
-    watch, // Need to watch 'isTechSpecific'
-    formState: { errors },
+        register,
+        handleSubmit,
+        reset,
+        control,
+        watch,
+        setValue, // <<< Get setValue from useForm
+        formState: { errors },
   } = useForm<CreateSessionFormData>({
     resolver: zodResolver(createSessionSchema),
     defaultValues: {
@@ -109,9 +110,30 @@ export function CreateSessionDialog({
       topic: "",
     },
   });
-
+  const [selectedTime, setSelectedTime] = useState<string>('');
   const isTechSpecific = watch("isTechSpecific"); // Watch the checkbox state
+  const combineDateTime = (selectedDate: Date | undefined, timeString: string): Date | undefined => {
+    if (!selectedDate || !timeString) return selectedDate; // Return date if no time, or undefined if no date
 
+    try {
+         // Parse HH:mm string
+         const timeParts = timeString.split(':');
+         const hours = parseInt(timeParts[0], 10);
+         const minutes = parseInt(timeParts[1], 10);
+
+         if (isNaN(hours) || isNaN(minutes)) return selectedDate; // Invalid time format
+
+         // Set hours and minutes on the selected date
+         let combined = setHours(selectedDate, hours);
+         combined = setMinutes(combined, minutes);
+         combined = setSeconds(combined, 0); // Reset seconds/ms
+         combined = setMilliseconds(combined, 0);
+         return combined;
+    } catch (e) {
+         console.error("Error combining date/time", e);
+         return selectedDate; // Fallback to just the date on error
+    }
+};
   // --- Fetch Available Hosts (Example) ---
   // In a real app, this might be a dedicated API endpoint or based on roles
   useEffect(() => {
@@ -119,19 +141,28 @@ export function CreateSessionDialog({
       // Fetch only when dialog opens
       setLoadingHosts(true);
       // Replace with your actual API call to get users who can be hosts
-      fetch("/api/users?role=host&limit=100") // Example placeholder API
-        .then((res) => {
-          if (!res.ok) throw new Error("Failed to fetch hosts");
+    //   fetch("/api/users?limit=100"); // Example placeholder API
+      fetch("/api/users?limit=100")
+        .then(async (res) => {
+          // Make the callback async to await potential text()
+          if (!res.ok) {
+            // Attempt to read error text if not ok
+            const errorText = await res.text();
+            // Throw an error with the text from the response
+            throw new Error(
+              errorText || `Failed to fetch hosts (${res.status})`
+            );
+          }
+          // Only parse JSON if response is ok (status 200-299)
           return res.json();
         })
         .then((data: SimpleUser[]) => {
-          // Assuming API returns SimpleUser[]
           setAvailableHosts(data);
         })
         .catch((err) => {
           console.error("Error loading hosts:", err);
-          toast.error("Could not load potential hosts.");
-          // Maybe disable host selection or show error
+          // Display the more specific error message from the API if available
+          toast.error(`Could not load hosts: ${err.message}`);
         })
         .finally(() => setLoadingHosts(false));
     }
@@ -144,15 +175,25 @@ export function CreateSessionDialog({
 
     // Ensure topic is null if not tech specific before sending
     const payload = {
-      ...data,
-      topic: data.isTechSpecific ? data.topic : null,
+        ...data,
+        topic: data.isTechSpecific ? (data.topic?.trim() || undefined) : undefined,
     };
-
+    console.log("Submitting Payload:", payload); 
     try {
       const response = await fetch("/api/ama/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+      }).then(async (res) => {
+        // Make the callback async to await potential text()
+        if (!res.ok) {
+          // Attempt to read error text if not ok
+          const errorText = await res.text();
+          // Throw an error with the text from the response
+          throw new Error(errorText || `Failed to fetch hosts (${res.status})`);
+        }
+        // Only parse JSON if response is ok (status 200-299)
+        return res.json();
       });
       const responseData = await response.json();
 
@@ -256,17 +297,48 @@ export function CreateSessionDialog({
                     <Calendar
                       mode="single"
                       selected={field.value}
-                      onSelect={field.onChange} // Pass selected date back to RHF
+                      onSelect={(date) => {
+                        const combined = combineDateTime(date, selectedTime);
+                        if (combined instanceof Date && !isNaN(combined.getTime())) {
+                            setValue("scheduledAt", combined, { shouldValidate: true });
+                        } else {
+                            // Optional: Handle the case where combination fails
+                            // Maybe set to undefined or keep previous valid value?
+                            // For now, just don't update if invalid.
+                            // Or explicitly set to undefined if date is cleared:
+                            // if (date === undefined) {
+                            //     setValue("scheduledAt", undefined, { shouldValidate: true });
+                            // }
+                        }// Update RHF state
+                    }} // Pass selected date back to RHF
                       disabled={(date) =>
                         date < new Date(Date.now() - 24 * 60 * 60 * 1000)
                       } // Disable past dates
                       initialFocus
                     />
-                    {/* Placeholder for Time Input */}
-                    <div className="p-2 border-t">
-                      <p className="text-xs text-muted-foreground">
-                        Time selection needed (add input).
-                      </p>
+                    {/* Time Picker */}
+                    <div className="space-y-1">
+                         <Label htmlFor="scheduledAtTime">Time *</Label>
+                         <Input
+                            id="scheduledAtTime"
+                            type="time"
+                            value={selectedTime}
+                            onChange={(e) => {
+                                const newTime = e.target.value;
+                                setSelectedTime(newTime);
+                                // Update RHF state immediately when time changes
+                                const currentDate = control._getWatch("scheduledAt"); // Get current date from RHF
+                                const combined = combineDateTime(currentDate, newTime);
+                                // --- Add Check Here ---
+                                if (combined instanceof Date && !isNaN(combined.getTime())) {
+                                    setValue("scheduledAt", combined, { shouldValidate: true });
+                                } else {
+                                     // Don't update if combining fails (e.g., date not picked yet)
+                                     // Or handle explicitly if needed
+                                }
+                            }}
+                            className={errors.scheduledAt ? "border-red-500" : ""} // Show error on time input as well
+                         />
                     </div>
                   </PopoverContent>
                 </Popover>
