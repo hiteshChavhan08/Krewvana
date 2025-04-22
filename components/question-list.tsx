@@ -71,20 +71,24 @@ function QuestionCard({
     else setIsLoadingAction(actionType);
 
     const toastId = toast.loading(loadingMessage);
+    let response: Response | null = null;
     try {
       const response = await action();
-      const responseData =
-        response.status !== 204 ? await response.json() : null; // Handle potential 204 from DELETE
+      // Handle potential 204 from DELETE
 
       if (!response.ok) {
-        throw new Error(
-          responseData?.message ||
-            `${errorMessagePrefix} failed (status ${response.status})`
-        );
+        let errorMsg = `Error ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.message || errorMsg;
+                } catch (jsonError) {
+                     errorMsg = await response.text() || response.statusText || errorMsg;
+                }
+                throw new Error(errorMsg);
       }
 
+      const responseData = response.status !== 204 ? await response.json() : null;
       toast.success(successMessage, { id: toastId });
-
       // Update local state *or* trigger parent refresh
       if (responseData && actionType !== "delete") {
         // Anonymize if needed before setting state
@@ -310,13 +314,14 @@ export function QuestionList({ sessionId, isHostOrAdmin }: QuestionListProps) {
     setIsLoading(true);
     setError(null);
     const apiUrl = `/api/ama/sessions/${sessionId}/questions`;
-
+    console.log(`[QuestionList] Fetching from: ${apiUrl}`);
     fetch(apiUrl)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load questions");
         return res.json();
       })
       .then((data: QuestionData[]) => {
+        console.log("[QuestionList] Data received:", data);
         setQuestions(data);
       })
       .catch((err) => {

@@ -48,7 +48,7 @@ const getStatusText = (status: AMASessionStatus): string => {
 function AMASessionCard({ session }: { session: AMASessionData }) {
   return (
     <Link
-      href={`/ama/${session.id}`}
+      href={`app/ama/${session.id}`}
       className="block hover:shadow-lg transition-shadow duration-200 rounded-lg"
     >
       <Card className="h-full flex flex-col">

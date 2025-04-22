@@ -109,7 +109,7 @@ export default async function AMASessionDetailPage({
 }: {
   params: { sessionId: string };
 }) {
-  const { sessionId } = params;
+  const { sessionId } = await params;
   const [session, currentUser] = await Promise.all([
     getSessionDetails(sessionId),
     getCurrentUser(),
