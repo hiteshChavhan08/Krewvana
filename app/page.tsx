@@ -3,16 +3,13 @@ import FeaturesSection from "@/components/landing/FeaturesSection";
 import CtaSection from "@/components/landing/CtaSection";
 import Footer from "@/components/landing/Footer";
 import WhySection from "@/components/landing/WhySection";
+import Link from "next/link";
 
 export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <main className="flex-grow">
-        <HeroSection />
-        <WhySection />
-        <FeaturesSection />
-        {/* Optional: Add HowItWorksSection here */}
-        <CtaSection />
+        <Link href={"/app"}>Use APP</Link>
       </main>
       <Footer />
     </div>

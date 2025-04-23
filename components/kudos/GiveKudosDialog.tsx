@@ -1,7 +1,7 @@
 // components/kudos/GiveKudosDialog.tsx
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,13 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useSession } from 'next-auth/react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { KudosCreateSchema, KudosCreateData } from '@/lib/schemas';
-import { User } from '@prisma/client'; // Assuming User type from Prisma
-import { ZodError } from 'zod';
-import { Input } from '../ui/input';
+import { useSession } from "next-auth/react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { KudosCreateSchema, KudosCreateData } from "@/lib/schemas";
+import { User } from "@prisma/client"; // Assuming User type from Prisma
+import { ZodError } from "zod";
+import { Input } from "../ui/input";
 
 // --- Mock API call function (replace with actual fetch later) ---
 // async function fetchUsers(query: string): Promise<User[]> {
@@ -36,56 +36,59 @@ import { Input } from '../ui/input';
 
 // --- Actual API Call ---
 async function createKudos(data: KudosCreateData): Promise<any> {
-  const response = await fetch('/api/kudos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("/api/kudos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!response.ok) {
     const errorData = await response.json();
     // More specific error handling based on status code
-    if (response.status === 403) throw new Error(errorData.error || 'Forbidden action.');
-    if (response.status === 404) throw new Error(errorData.error || 'Receiver not found.');
-    throw new Error(errorData.error || 'Failed to create Kudos.');
+    if (response.status === 403)
+      throw new Error(errorData.error || "Forbidden action.");
+    if (response.status === 404)
+      throw new Error(errorData.error || "Receiver not found.");
+    throw new Error(errorData.error || "Failed to create Kudos.");
   }
   return response.json();
 }
 
-
 export function GiveKudosDialog() {
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
-  const [receiverId, setReceiverId] = useState(''); // TODO: Replace with user selection component
-  const [message, setMessage] = useState('');
-  const [receiverName, setReceiverName] = useState(''); // For display confirmation
+  const [receiverId, setReceiverId] = useState(""); // TODO: Replace with user selection component
+  const [message, setMessage] = useState("");
+  const [receiverName, setReceiverName] = useState(""); // For display confirmation
   const queryClient = useQueryClient();
 
   // --- TODO: Replace basic input with User Search Component ---
   // For now, using a simple input for receiver ID
   const handleReceiverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setReceiverId(e.target.value);
-      // In a real component, you'd set the name here too
-      setReceiverName(`User ID: ${e.target.value}`);
-  }
+    setReceiverId(e.target.value);
+    // In a real component, you'd set the name here too
+    setReceiverName(`User ID: ${e.target.value}`);
+  };
 
   const mutation = useMutation({
     mutationFn: createKudos,
     onSuccess: (data) => {
-      toast.success('Kudos Sent!', {
-        description: `You gave Kudos to ${data.receiver.name || 'user'}.`,
+      toast.success("Kudos Sent!", {
+        description: `You gave Kudos to ${data.receiver.name || "user"}.`,
       });
       // Invalidate queries to refetch data
-      queryClient.invalidateQueries({ queryKey: ['kudosFeed'] });
-      queryClient.invalidateQueries({ queryKey: ['leaderboard'] }); // If leaderboard exists
-      queryClient.invalidateQueries({ queryKey: ['userData', session?.user?.id] }); // Invalidate self data
+      queryClient.invalidateQueries({ queryKey: ["kudosFeed"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] }); // If leaderboard exists
+      queryClient.invalidateQueries({
+        queryKey: ["userData", session?.user?.id],
+      }); // Invalidate self data
       setOpen(false); // Close dialog on success
-      setMessage('');
-      setReceiverId('');
-      setReceiverName('');
+      setMessage("");
+      setReceiverId("");
+      setReceiverName("");
     },
     onError: (error: Error) => {
-      toast.error('Failed to Send Kudos', {
-        description: error.message || 'An unexpected error occurred.',
+      toast.error("Failed to Send Kudos", {
+        description: error.message || "An unexpected error occurred.",
       });
     },
   });
@@ -93,44 +96,58 @@ export function GiveKudosDialog() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!session?.user?.id) {
-        toast.error("Authentication Error", { description: "Please log in again." });
-        return;
+      toast.error("Authentication Error", {
+        description: "Please log in again.",
+      });
+      return;
     }
     // Basic validation check before Zod
     if (!receiverId || !message) {
-        toast.warning("Missing Information", { description: "Please select a receiver and write a message." });
-        return;
+      toast.warning("Missing Information", {
+        description: "Please select a receiver and write a message.",
+      });
+      return;
     }
 
     try {
-        // Validate with Zod before submitting
-        const validatedData = KudosCreateSchema.parse({ receiverId, message });
-        mutation.mutate(validatedData);
+      // Validate with Zod before submitting
+      const validatedData = KudosCreateSchema.parse({ receiverId, message });
+      mutation.mutate(validatedData);
     } catch (error: any) {
-        if (error instanceof ZodError) {
-             // Show validation errors (e.g., first error)
-             toast.error("Validation Error", { description: error.errors[0].message });
-        } else {
-            toast.error("Validation Error", { description: "Invalid data provided." });
-        }
-        console.error("Zod Validation Error:", error);
+      if (error instanceof ZodError) {
+        // Show validation errors (e.g., first error)
+        toast.error("Validation Error", {
+          description: error.errors[0].message,
+        });
+      } else {
+        toast.error("Validation Error", {
+          description: "Invalid data provided.",
+        });
+      }
+      console.error("Zod Validation Error:", error);
     }
   };
 
   // Reset form when dialog is closed
+  // Reset form when dialog is closed
   useEffect(() => {
+    // This logic should only run when the dialog transitions to the closed state
     if (!open) {
-      setMessage('');
-      setReceiverId('');
-      setReceiverName('');
-      mutation.reset(); // Reset mutation state
+      console.log("Dialog closed, resetting form state."); // Add temporary log
+      setMessage("");
+      setReceiverId("");
+      setReceiverName("");
+      // It's safe to call mutation.reset() here as its reference is stable
+      mutation.reset();
     }
-  }, [open, mutation]);
+  }, [open]); // <-- CORRECTED DEPENDENCY ARRAY
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" size="lg">Give Kudos</Button>
+        <Button variant="default" size="lg">
+          Give Kudos
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
@@ -173,10 +190,12 @@ export function GiveKudosDialog() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-               <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
             </DialogClose>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Sending...' : 'Send Kudos'}
+              {mutation.isPending ? "Sending..." : "Send Kudos"}
             </Button>
           </DialogFooter>
         </form>
