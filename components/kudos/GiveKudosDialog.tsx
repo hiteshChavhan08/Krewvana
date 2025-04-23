@@ -1,7 +1,7 @@
 // components/kudos/GiveKudosDialog.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,80 +11,71 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose, // Import DialogClose
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "next-auth/react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query"; // Removed unused useQuery
 import { toast } from "sonner";
-import { KudosCreateSchema, KudosCreateData } from "@/lib/schemas";
-import { User } from "@prisma/client"; // Assuming User type from Prisma
+import { KudosCreateSchema, KudosCreateData } from "@/lib/schemas"; // Assuming schema definition is correct
 import { ZodError } from "zod";
-import { Input } from "../ui/input";
+import { UserSearchSelect } from "@/components/search/UserSearchSelect"; // Ensure path is correct
+import { SimpleUser } from "@/types/types"; // Ensure path is correct
+import { Loader2 } from "lucide-react";
 
-// --- Mock API call function (replace with actual fetch later) ---
-// async function fetchUsers(query: string): Promise<User[]> {
-//   // Replace with: const res = await fetch(`/api/users?search=${query}`);
-//   console.log("Fetching users with query:", query);
-//   // Mock response for now
-//   return [
-//     { id: 'clerk_user_1', name: 'Test User One', email: 'test1@example.com', image: null, points: 0, passwordHash: null, emailVerified: null, createdAt: new Date(), updatedAt: new Date() },
-//     { id: 'clerk_user_2', name: 'Test User Two', email: 'test2@example.com', image: null, points: 0, passwordHash: null, emailVerified: null, createdAt: new Date(), updatedAt: new Date() },
-//   ].filter(u => u.name?.toLowerCase().includes(query.toLowerCase()));
-// }
-
-// --- Actual API Call ---
+// API Call Function (Keep outside component for clarity)
 async function createKudos(data: KudosCreateData): Promise<any> {
-  const response = await fetch("/api/kudos", {
+  const response = await fetch("/api/kudos", { // Ensure this API endpoint exists and works
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+
+  // Improved error handling
   if (!response.ok) {
-    const errorData = await response.json();
-    // More specific error handling based on status code
-    if (response.status === 403)
-      throw new Error(errorData.error || "Forbidden action.");
-    if (response.status === 404)
-      throw new Error(errorData.error || "Receiver not found.");
-    throw new Error(errorData.error || "Failed to create Kudos.");
+    let errorMsg = "Failed to create Kudos."; // Default message
+    try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || `Request failed with status ${response.status}`;
+    } catch (e) {
+        // If response is not JSON, use status text
+        errorMsg = response.statusText || errorMsg;
+    }
+     // Throw specific errors based on status if needed
+     if (response.status === 403) throw new Error(errorMsg || "Forbidden action.");
+     if (response.status === 404) throw new Error(errorMsg || "Receiver not found.");
+     throw new Error(errorMsg);
   }
-  return response.json();
+  return response.json(); // Return parsed JSON on success
 }
 
+// Main Component
 export function GiveKudosDialog() {
   const { data: session } = useSession();
-  const [open, setOpen] = useState(false);
-  const [receiverId, setReceiverId] = useState(""); // TODO: Replace with user selection component
-  const [message, setMessage] = useState("");
-  const [receiverName, setReceiverName] = useState(""); // For display confirmation
   const queryClient = useQueryClient();
 
-  // --- TODO: Replace basic input with User Search Component ---
-  // For now, using a simple input for receiver ID
-  const handleReceiverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setReceiverId(e.target.value);
-    // In a real component, you'd set the name here too
-    setReceiverName(`User ID: ${e.target.value}`);
-  };
+  const [open, setOpen] = useState(false);
+  const [selectedReceiver, setSelectedReceiver] = useState<SimpleUser | null>(null);
+  const [message, setMessage] = useState("");
 
+  // Mutation Hook
   const mutation = useMutation({
     mutationFn: createKudos,
     onSuccess: (data) => {
+      // Use receiver name from the API response for accuracy
       toast.success("Kudos Sent!", {
-        description: `You gave Kudos to ${data.receiver.name || "user"}.`,
+        description: `You gave Kudos to ${data?.receiver?.name ?? 'the user'}.`, // Use optional chaining
       });
-      // Invalidate queries to refetch data
+      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ["kudosFeed"] });
-      queryClient.invalidateQueries({ queryKey: ["leaderboard"] }); // If leaderboard exists
-      queryClient.invalidateQueries({
-        queryKey: ["userData", session?.user?.id],
-      }); // Invalidate self data
-      setOpen(false); // Close dialog on success
-      setMessage("");
-      setReceiverId("");
-      setReceiverName("");
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      // Optionally invalidate receiver's user data if you have a query for that
+      // queryClient.invalidateQueries({ queryKey: ["userData", data?.receiver?.id] });
+      queryClient.invalidateQueries({ queryKey: ["userData", session?.user?.id] }); // Invalidate self data (e.g., points)
+
+      setOpen(false); // Close dialog
+      // Resetting state is handled by the useEffect below
     },
     onError: (error: Error) => {
       toast.error("Failed to Send Kudos", {
@@ -93,16 +84,19 @@ export function GiveKudosDialog() {
     },
   });
 
+  // Form Submission Handler
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!session?.user?.id) {
-      toast.error("Authentication Error", {
-        description: "Please log in again.",
-      });
+      toast.error("Authentication Error", { description: "Please log in again." });
       return;
     }
-    // Basic validation check before Zod
-    if (!receiverId || !message) {
+
+    // Trim message before validation
+    const trimmedMessage = message.trim();
+
+    // Check for receiver and non-empty message
+    if (!selectedReceiver?.id || !trimmedMessage) {
       toast.warning("Missing Information", {
         description: "Please select a receiver and write a message.",
       });
@@ -110,37 +104,38 @@ export function GiveKudosDialog() {
     }
 
     try {
-      // Validate with Zod before submitting
-      const validatedData = KudosCreateSchema.parse({ receiverId, message });
+      // Use selected receiver ID and trimmed message for validation
+      const validatedData = KudosCreateSchema.parse({
+          receiverId: selectedReceiver.id,
+          message: trimmedMessage
+        });
+      // Call the mutation with validated data
       mutation.mutate(validatedData);
     } catch (error: any) {
       if (error instanceof ZodError) {
-        // Show validation errors (e.g., first error)
-        toast.error("Validation Error", {
-          description: error.errors[0].message,
-        });
+        // Extract and show Zod validation errors
+        const formattedErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`).join('\n');
+        toast.error("Validation Error", { description: formattedErrors || error.errors[0]?.message });
       } else {
-        toast.error("Validation Error", {
-          description: "Invalid data provided.",
-        });
+        // Handle other potential errors during validation
+        toast.error("Validation Error", { description: "Invalid data provided." });
       }
-      console.error("Zod Validation Error:", error);
+      console.error("Form Validation Error:", error);
     }
   };
 
-  // Reset form when dialog is closed
-  // Reset form when dialog is closed
+  // Effect to reset state when dialog closes
   useEffect(() => {
-    // This logic should only run when the dialog transitions to the closed state
     if (!open) {
-      console.log("Dialog closed, resetting form state."); // Add temporary log
+      // Reset local state
       setMessage("");
-      setReceiverId("");
-      setReceiverName("");
-      // It's safe to call mutation.reset() here as its reference is stable
+      setSelectedReceiver(null);
+      // Reset mutation state (errors, status)
       mutation.reset();
     }
-  }, [open]); // <-- CORRECTED DEPENDENCY ARRAY
+    // Depend only on 'open' state for closing logic.
+    // 'mutation' reference is stable, no need to include unless its options change.
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -156,26 +151,32 @@ export function GiveKudosDialog() {
             Recognize a colleague for their awesome work!
           </DialogDescription>
         </DialogHeader>
+        {/* Use form tag and onSubmit */}
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="receiver" className="text-right">
-                To
+            {/* Receiver Selection */}
+            <div className="grid grid-cols-4 items-start gap-4"> {/* Use items-start */}
+              <Label htmlFor="receiver-search" className="text-right pt-2"> {/* Match ID */}
+                To *
               </Label>
-              {/* --- TODO: Replace this Input with a User Search Component --- */}
-              <Input
-                id="receiver"
-                placeholder="Enter Receiver User ID" // Temporary placeholder
-                value={receiverId}
-                onChange={handleReceiverChange} // Temporary handler
-                className="col-span-3"
-                required
-              />
-              {/* --- End Placeholder Input --- */}
+              <div className="col-span-3">
+                <UserSearchSelect
+                   // Give the underlying input a unique ID for the label
+                   // (UserSearchSelect internal input should ideally accept an id prop)
+                   // For now, we link label to the search component conceptually
+                   // id="receiver-search"
+                   selectedUser={selectedReceiver}
+                   onUserSelect={setSelectedReceiver}
+                   placeholder="Search colleague by name or email..."
+                   excludeUserId={session?.user?.id} // Exclude logged-in user
+                />
+                 {/* Consider adding Zod error display here if needed */}
+              </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="message" className="text-right">
-                Message
+            {/* Message Input */}
+            <div className="grid grid-cols-4 items-start gap-4"> {/* Use items-start */}
+              <Label htmlFor="message" className="text-right pt-2">
+                Message *
               </Label>
               <Textarea
                 id="message"
@@ -183,9 +184,11 @@ export function GiveKudosDialog() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="col-span-3 min-h-[100px]"
-                required
-                maxLength={500} // Match schema validation
+                required // Keep HTML5 required for basic check
+                maxLength={500} // UI limit, Zod handles actual validation
+                aria-invalid={mutation.error ? 'true' : 'false'} // Indicate error state based on mutation
               />
+               {/* Consider adding Zod error display here */}
             </div>
           </div>
           <DialogFooter>
@@ -194,8 +197,12 @@ export function GiveKudosDialog() {
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Sending..." : "Send Kudos"}
+            <Button
+              type="submit"
+              disabled={mutation.isPending || !selectedReceiver || !message.trim()} // Disable if pending, no receiver, or empty message
+            >
+              {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Send Kudos
             </Button>
           </DialogFooter>
         </form>
