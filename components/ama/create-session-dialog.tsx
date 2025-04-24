@@ -188,7 +188,6 @@ export function CreateSessionDialog({
       topic: data.isTechSpecific ? data.topic?.trim() || undefined : undefined,
     };
 
-    console.log("Submitting Payload:", payload);
     let response: Response | null = null;
     try {
       const response = await fetch("/api/ama/sessions", {

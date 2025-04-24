@@ -21,8 +21,7 @@ async function FetchAMAList({ status }: { status: AMASessionStatus }) {
     }
 
     const apiUrl = `${baseUrl}/api/ama/sessions?status=${status}&limit=9`;
-    console.log(`Fetching AMA sessions from: ${apiUrl}`);
-
+   
     const response = await fetch(apiUrl, {
       cache: "no-store",
     });

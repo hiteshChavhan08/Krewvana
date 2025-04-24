@@ -314,14 +314,14 @@ export function QuestionList({ sessionId, isHostOrAdmin }: QuestionListProps) {
     setIsLoading(true);
     setError(null);
     const apiUrl = `/api/ama/sessions/${sessionId}/questions`;
-    console.log(`[QuestionList] Fetching from: ${apiUrl}`);
+   
     fetch(apiUrl)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load questions");
         return res.json();
       })
       .then((data: QuestionData[]) => {
-        console.log("[QuestionList] Data received:", data);
+       
         setQuestions(data);
       })
       .catch((err) => {

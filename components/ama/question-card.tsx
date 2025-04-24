@@ -1,3 +1,4 @@
+// components\ama\question-card.tsx
 "use client"
 
 import { useState } from "react"

@@ -1,6 +1,5 @@
-import { AMASessionStatus } from "@prisma/client";
+import type { AMASession, AMAQuestion, User as PrismaUser, AMASessionStatus, UserRole } from "@prisma/client";
 
-// lib/types.ts (or similar shared location)
 export type SimpleUser = {
   id: string;
   name: string | null;
@@ -8,20 +7,26 @@ export type SimpleUser = {
   image?: string | null; // Optional image
 };
 
-export type AMASessionData = {
-  id: string;
-  title: string;
-  description: string | null;
-  scheduledAt: string | Date;
-  status: AMASessionStatus;
-  isTechSpecific: boolean;
-  topic: string | null;
-  host: {
-    id: string;
-    name: string | null;
-    image: string | null;
-  };
+export type CurrentUserData = Pick<PrismaUser, 'id' | 'name' | 'image' | 'role'>;
+
+// Type for the main session data fetched server-side and passed down
+export type AMASessionPageData = AMASession & {
+  host: Pick<PrismaUser, 'id' | 'name' | 'image'>;
   _count: {
     questions: number;
   };
 };
+
+// Type for individual questions fetched client-side
+export type AMAQuestionData = AMAQuestion & {
+  submittedBy: Pick<PrismaUser, 'id' | 'name' | 'image'> | null; // User might be deleted
+  answeredBy: Pick<PrismaUser, 'id' | 'name' | 'image'> | null;  // User might be deleted
+};
+
+// You might already have this from previous code
+export interface AMASessionData extends AMASession {
+    host: Pick<PrismaUser, 'id' | 'name' | 'image'>;
+    _count: {
+        questions: number;
+    };
+}

@@ -47,8 +47,7 @@ export async function POST(request: Request) {
     const parseResult = ShoutoutCreateSchema.safeParse(json);
 
     if (!parseResult.success) {
-       console.log("Shoutout Validation Failed:", parseResult.error.errors);
-       return NextResponse.json({ error: 'Validation failed', details: parseResult.error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'Validation failed', details: parseResult.error.errors }, { status: 400 });
     }
 
     const { type, message, imageUrl, relatedUserId } = parseResult.data;
@@ -75,8 +74,6 @@ export async function POST(request: Request) {
       }
     });
 
-    // TODO: Award points? Send notification?
-    console.log(`Shoutout created: ${newShoutout.id} by ${userId}`);
     return NextResponse.json(newShoutout, { status: 201 });
 
   } catch (error) {

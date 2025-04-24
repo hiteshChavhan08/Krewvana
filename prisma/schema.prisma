@@ -330,7 +330,7 @@ model AMAQuestion {
   id            String    @id @default(cuid())
   text          String    @db.Text 
   isAnonymous   Boolean   @default(false)
-  isApproved    Boolean   @default(false)
+  // isApproved    Boolean   @default(false)
   answerText    String?   @db.Text
   answeredAt    DateTime?
   createdAt     DateTime  @default(now())
@@ -349,6 +349,6 @@ model AMAQuestion {
 
   @@index([sessionId])
   @@index([submittedById])
-  @@index([isApproved])
+  // @@index([isApproved])
   @@index([answeredAt])
 }

@@ -36,7 +36,6 @@ async function canModerateQuestion(
 
     return isHost || isAdmin; // Allow if Host OR Admin
   } catch (error) {
-    console.log("Error checking moderation permissions:", error);
     return false;
   }
 }

@@ -50,7 +50,6 @@ type ActivityItem = {
 // --- API Fetch Functions ---
 // (Keep fetch functions as they were)
 async function fetchCurrentUserProfile(): Promise<UserProfileSubset> {
-  // console.log("FETCH: /api/users/me"); // Reduce logging noise during loop diagnosis
   const response = await fetch("/api/users/me");
   if (!response.ok) {
     const errorData = await response.text();
@@ -63,7 +62,6 @@ async function fetchCurrentUserProfile(): Promise<UserProfileSubset> {
 }
 
 async function fetchRecentActivity(limit: number = 5): Promise<ActivityItem[]> {
-  // console.log("FETCH: recent activity"); // Reduce logging noise
   try {
     const [kudosRes, shoutoutsRes] = await Promise.all([
       fetch(`/api/kudos?limit=${limit}`),
@@ -127,10 +125,7 @@ export default function DashboardPage() {
   // Log render count and session status on every render
   useEffect(() => {
     renderCount.current += 1;
-    console.log(`--- DashboardPage Render #${renderCount.current} ---`);
-    console.log("Session Status:", status);
-    // console.log('Session Object Ref Changed:', session !== prevSession.current); // Requires storing prev session
-    // prevSession.current = session; // Store for next render comparison
+   
   }); // No dependency array - runs on every render
 
   // const prevSession = useRef(session); // Uncomment with the comparison log above if needed
@@ -140,8 +135,7 @@ export default function DashboardPage() {
 
   // --- Stabilize queryFn for activity using useCallback ---
   const fetchActivityCallback = useCallback(() => {
-    // console.log("Executing fetchActivityCallback"); // Log when the callback itself runs
-    return fetchRecentActivity(5);
+   return fetchRecentActivity(5);
   }, []); // Empty dependency array: function reference is stable
 
   // --- Query for current user data ---
@@ -172,14 +166,7 @@ export default function DashboardPage() {
     // Keep react-query defaults for notifications
   });
 
-  // Log query statuses (useful for seeing if queries are constantly refetching)
-  // console.log('Query Statuses:', {
-  //     user: { isLoadingUser, isFetchingUser, isErrorUser },
-  //     activity: { isLoadingActivity, isFetchingActivity, isErrorActivity }
-  // });
-
-  // --- Combined Loading State ---
-  // Base loading on initial load (isLoading), not background fetching (isFetching)
+  
   const isLoading =
     status === "loading" || // Session is loading
     (isUserQueryEnabled && isLoadingUser) || // User query is enabled and initially loading

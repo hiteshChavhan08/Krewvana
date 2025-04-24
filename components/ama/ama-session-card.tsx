@@ -1,3 +1,4 @@
+// component/ama-session-card.tsx
 import { formatShortDate, formatTime } from "@/lib/utils/date-helpers";
 import { getAMAStatusBadgeVariant, getInitials } from "@/lib/utils/helpers";
 import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar";

@@ -2,8 +2,9 @@
 import { AMASessionStatus } from "@prisma/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Mic } from "lucide-react";
-import { AMASessionCard, AMASessionData } from "./ama-session-card"; // Import type and card
+import { AMASessionCard } from "@/components/ama/ama-session-card"; // Import type and card
 import { AMAListSkeleton } from "./ama-list-skeleton"; // Import skeleton
+import { AMASessionData } from "@/types/types";
 
 const getStatusText = (status: AMASessionStatus): string => {
   if (!status) return "";
@@ -21,8 +22,7 @@ export async function AMASessionList({ status }: { status: AMASessionStatus }) {
 
     // Consider adding pagination later if needed (using searchParams maybe)
     const apiUrl = `${baseUrl}/api/ama/sessions?status=${status}&limit=9`;
-    console.log(`Fetching AMA sessions (${status}) from: ${apiUrl}`);
-
+    
     // Use fetch with no-store cache for dynamic data
     const response = await fetch(apiUrl, {
       cache: "no-store",

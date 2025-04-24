@@ -14,11 +14,8 @@ async function canModerateQuestion(
   userId: string,
   sessionId: string
 ): Promise<boolean> {
-  console.log(
-    `[canModerateQuestion] Checking: userId='${userId}', sessionId='${sessionId}'`
-  ); // Log input
+  
   if (!userId || !sessionId) {
-    console.log("[canModerateQuestion] Error: Missing userId or sessionId");
     return false;
   }
   try {
@@ -33,27 +30,19 @@ async function canModerateQuestion(
         select: { role: true },
       }),
     ]);
-    // Log fetched data
-    console.log("[canModerateQuestion] Fetched session:", sessionId);
-    console.log("[canModerateQuestion] Fetched currentUser:", currentUserResult);
+    
     if (!sessionId || !currentUserResult) {
-      console.log(
-        "[canModerateQuestion] Failed to fetch session or current user."
-      );
+
       return false;
     }
 
     const isHost = sessionResult?.session.hostId === userId;
     const isAdmin = currentUserResult.role === UserRole.ADMIN;
 
-    // Log the results of the checks
-    console.log(
-      `[canModerateQuestion] Check results: isHost=${isHost}, isAdmin=${isAdmin}`
-    );
+    
 
     return isHost || isAdmin; // Return true if either is true
   } catch (error) {
-    console.error("[canModerateQuestion] Error during check:", error);
     return false;
   }
 }
@@ -63,18 +52,17 @@ export async function GET(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const user = await getCurrentUser(); // Check user for potential filtering later
-    // if (!user) { return new NextResponse('Unauthorized', { status: 401 }); }
+    const user = await getCurrentUser();
 
     const { sessionId } = await params;
     if (!user) {
-      console.log("[API Questions GET] No user found, applying regular filters.");
-       // Apply regular user filters if no user logged in
-       let whereClause: any = { sessionId: sessionId, isApproved: true };
-       const questions = await prisma.aMAQuestion.findMany({ where: whereClause, /* ... */ });
-       // ... process and return ...
-       return NextResponse.json([]); // Or however you handle unauthenticated
-  }
+      let whereClause: any = { sessionId: sessionId, isApproved: true };
+      const questions = await prisma.aMAQuestion.findMany({
+        where: whereClause /* ... */,
+      });
+      // ... process and return ...
+      return NextResponse.json([]);
+    }
     if (!sessionId) {
       return NextResponse.json(
         { message: "Session ID required" },
@@ -96,24 +84,14 @@ export async function GET(
     const canModerate = user
       ? await canModerateQuestion(user.id, sessionId)
       : false;
-    console.log(
-      `[API Questions GET] User ID: ${user?.id}, Session ID: ${sessionId}, Can Moderate: ${canModerate}`
-    );
-
     // --- Filtering Logic ---
     if (canModerate) {
-      // Host/Admin View: More flexible filtering based on query params
-      console.log("[API Questions GET] Applying Host/Admin filters");
-      console.log(
-        "[API Questions GET] Applying Host/Admin filters (if any from query params)"
-      );
       if (approved === "true") {
         whereClause.isApproved = true;
       }
       if (approved === "false") {
         whereClause.isApproved = false;
       }
-      // If neither approved=true nor approved=false is specified, show ALL (approved and pending)
 
       if (answered === "true") {
         whereClause.answerText = { not: null };
@@ -125,11 +103,7 @@ export async function GET(
         }
         whereClause.answerText = null;
       }
-      // If neither answered=true nor answered=false is specified, show ALL (answered and unanswered)
     } else {
-      // Regular User View: Default to showing APPROVED questions (answered or unanswered)
-      console.log("[API Questions GET] Applying Regular User filters");
-      console.log("[API Questions GET] Applying Regular User filters");
       whereClause.isApproved = true;
 
       // Allow regular users to filter by answered status *within* approved questions
@@ -140,7 +114,6 @@ export async function GET(
         whereClause.answerText = null;
       }
     }
-    console.log("[API Questions GET] Final whereClause:", whereClause);
 
     // TODO: Add logic for HOST/ADMIN to see unapproved questions
     // const session = await prisma.aMASession.findUnique({ where: {id: sessionId}, select: {hostId: true}});
@@ -170,9 +143,7 @@ export async function GET(
       ],
       // Add pagination later if needed
     });
-    console.log(
-      `[API Questions GET] Found ${questions.length} questions with simplified filter.`
-    );
+   
     // --- Anonymize Data ---
     const processedQuestions = questions.map((q) => ({
       ...q,

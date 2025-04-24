@@ -109,7 +109,6 @@ export async function PUT(request: Request) {
       },
     });
 
-    console.log(`User profile updated for ${userId}`);
     return NextResponse.json(updatedUser, { status: 200 });
   } catch (error: any) {
     if (error instanceof ZodError) {
