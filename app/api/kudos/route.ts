@@ -24,7 +24,7 @@ async function awardBadge(
     await tx.userBadge.create({
       data: { userId, badgeId },
     });
-  
+
     // TODO: Add notification logic here later?
     return true; // Indicate badge was awarded
   }
@@ -175,8 +175,6 @@ export async function POST(request: Request) {
       return newKudos; // Return the created Kudos object from the transaction
     }); // --- End Prisma Transaction ---
 
-   
-    );
     return NextResponse.json(result, { status: 201 }); // Return Kudos object
   } catch (error: any) {
     if (error instanceof ZodError) {
