@@ -219,7 +219,7 @@
     color: hsl(0, 0%, 98%); /* Light text */
     border: 1px solid hsl(0, 0%, 25%); /* Slightly lighter border */
   }
-  
+
   /* Style toolbar buttons in dark mode */
   .dark .plate-toolbar button {
     background-color: hsl(0, 0%, 20%);
@@ -230,7 +230,7 @@
     border-radius: 4px;
     cursor: pointer;
   }
-  
+
   /* Hover effect for toolbar buttons in dark mode */
   .dark .plate-toolbar button:hover {
     background-color: hsl(0, 0%, 25%);
