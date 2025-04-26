@@ -40,6 +40,7 @@ const navItems: NavItem[] = [
   { href: "/app/wellness", label: "Wellness", icon: HeartPulseIcon },
   { href: "/app/learning", label: "Learning", icon: Lightbulb },
   { href: "/app/ama", label: "AMA", icon: MessageCircleQuestion  },
+  { href: "/app/qna", label: "QNA", icon: MessageCircleQuestion  },
 ];
 
 // Map NavItem[] to the format expected by SidebarLink

@@ -341,7 +341,7 @@ model AMAQuestion {
 model Question {
   id        String   @id @default(cuid())
   title     String
-  content   String   @db.Text
+  content   Json // Changed from String @db.Text to Json for Plate.js output
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -358,11 +358,12 @@ model Question {
 
   @@index([authorId])
   @@index([createdAt])
+  // Maybe add index for full-text search on title/content later depending on DB
 }
 
 model Answer {
   id         String   @id @default(cuid())
-  content    String   @db.Text
+  content    Json // Changed from String @db.Text to Json for Plate.js output
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -376,13 +377,13 @@ model Answer {
 
   isAccepted     Boolean    @default(false) // Denormalized flag for easier querying
   acceptedIn     Question?  @relation("AcceptedAnswerForQuestion") // Link back to the question where this answer is accepted
-  pointLogReward PointLog[] // If accepted, potentially multiple logs (initial + edits?) - or make it one-to-one with unique constraint? Let's start with one-to-many.
+  pointLogReward PointLog[] // Link to points awarded if this answer is accepted
 
   @@index([authorId])
   @@index([questionId])
   @@index([createdAt])
+  @@index([isAccepted]) // Index potentially useful for finding accepted answers
 }
-
 model Tag {
   id        String        @id @default(cuid())
   name      String        @unique // Tag names should be unique
