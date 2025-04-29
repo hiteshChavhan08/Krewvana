@@ -1,153 +1,184 @@
 // app/api/questions/[questionId]/route.ts
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  respondSuccess,
+  respondError,
+  respondBadRequest,
+  respondUnauthorized,
+  respondForbidden,
+  respondNotFound,
+  ApiError,
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError, // Import utilities & errors
+} from "@/lib/api/responses";
+import {
+  getQuestionDetails,
+  updateQuestion,
+  deleteQuestion,
+  UpdateQuestionInputSchema, // Import services and schema
+} from "@/services/qnaService";
 
-// --- GET Handler (Fetch Single Question Details) ---
+// GET Handler - Fetch Single Question Details
 export async function GET(
   request: Request,
-  { params }: { params: { questionId: string } }
+  { params }: { params: { questionId?: string } }
 ) {
-  const questionId = params.questionId;
-  if (!questionId) {
-    return new NextResponse(JSON.stringify({ message: 'Question ID is required' }), { status: 400 });
-  }
-
-  // Optional: Get current user session to determine vote status later
-  const session = await getServerSession(authOptions);
-  const userId = session?.user?.id;
-
   try {
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
-      include: {
-        author: { select: { id: true, name: true, image: true } },
-        tags: { include: { tag: { select: { name: true, id: true } } } },
-        // Fetch all answers associated with this question
-        answers: {
-          orderBy: [
-            // Show accepted answer first, then sort by votes (desc), then by creation date (asc)
-            { isAccepted: 'desc' },
-            // { votes: { _count: 'desc' } }, // Sorting by votes requires calculation/denormalization
-            { createdAt: 'asc' },
-          ],
-          include: {
-            author: { select: { id: true, name: true, image: true } },
-            // Fetch votes for each answer (needed for count and user status)
-            votes: {
-              select: {
-                userId: true,
-                voteType: true, // Include vote type if needed later
-              },
-            },
-          },
-        },
-        // Fetch votes for the question itself
-        votes: {
-            select: {
-                userId: true,
-                voteType: true,
-            }
-        },
-        acceptedAnswer: { select: { id: true } }, // Still useful to confirm which one is accepted
-      },
-    });
+    // 1. Authentication (optional, service fn needs userId for vote status)
+    const user = await getCurrentUser();
 
-    if (!question) {
-      return new NextResponse(JSON.stringify({ message: 'Question not found' }), { status: 404 });
+    // 2. Parameter Validation
+    const { questionId } = params;
+    if (!questionId) {
+      throw new BadRequestError("Question ID parameter is required.");
     }
 
-    // --- Process Votes (Calculate counts and user status) ---
-    // Process question votes
-    const questionVoteCount = question.votes.length; // Simple count for now (assuming only upvotes)
-    const userQuestionVote = userId ? question.votes.find(v => v.userId === userId) : null;
+    // 3. Call Service Function (handles fetching, vote processing, not found)
+    const questionDetails = await getQuestionDetails(questionId, user?.id); // Pass userId or null
 
-    // Process answer votes
-    const answersWithVoteCounts = question.answers.map(answer => {
-        const answerVoteCount = answer.votes.length;
-        const userAnswerVote = userId ? answer.votes.find(v => v.userId === userId) : null;
-        // Remove the raw votes array before sending to client for privacy/size
-        const { votes, ...answerData } = answer;
-        return {
-            ...answerData,
-            voteCount: answerVoteCount,
-            userVote: userAnswerVote ? userAnswerVote.voteType : null, // Send 'UPVOTE' or null
-        };
-    });
-
-    // Prepare final response object
-    const { votes, answers, ...questionData } = question; // Remove raw votes/answers
-    const responseData = {
-        ...questionData,
-        voteCount: questionVoteCount,
-        userVote: userQuestionVote ? userQuestionVote.voteType : null,
-        answers: answersWithVoteCounts, // Use processed answers
-    };
-
-
-    return NextResponse.json(responseData);
-
-  } catch (error) {
-    console.error(`[GET /api/questions/${questionId}] Failed to fetch question:`, error);
-    return new NextResponse(JSON.stringify({ message: 'Failed to fetch question details' }), { status: 500 });
+    // 4. Success Response
+    return respondSuccess(questionDetails);
+  } catch (error: any) {
+    // 5. Centralized Error Handling
+    if (error instanceof ApiError) {
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message);
+      if (error instanceof NotFoundError) return respondNotFound(error.message);
+    }
+    console.error(
+      `[API GET /api/questions/${params.questionId}] Error:`,
+      error
+    );
+    return respondError("Failed to fetch question details.");
   }
 }
 
-
-// --- PUT Handler (Update Question - Placeholder) ---
+// PUT Handler - Update Question
 export async function PUT(
-    request: Request,
-    { params }: { params: { questionId: string } }
+  request: Request,
+  { params }: { params: { questionId?: string } }
 ) {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-    const questionId = params.questionId;
-
-     if (!userId) {
-        return new NextResponse(JSON.stringify({ message: 'Unauthorized' }), { status: 401 });
-    }
-     if (!questionId) {
-        return new NextResponse(JSON.stringify({ message: 'Question ID is required' }), { status: 400 });
+  try {
+    // 1. Authentication
+    const user = await getCurrentUser();
+    if (!user?.id || user.role === undefined) {
+      // Need full user for auth check
+      return respondUnauthorized("Authentication required with valid role.");
     }
 
-    // TODO: Implement Zod validation for update payload (title, content, tags)
-    // TODO: Fetch the question to check if the current user is the author OR an admin
-    // TODO: Implement the actual update logic using prisma.question.update()
-    // TODO: Handle tag updates (removing old, adding new)
+    // 2. Parameter Validation
+    const { questionId } = params;
+    if (!questionId) {
+      throw new BadRequestError("Question ID parameter is required.");
+    }
 
-    console.log("PUT request received for question:", questionId, "by user:", userId);
-    const body = await request.json();
-    console.log("Request body:", body);
+    // 3. Request Body Parsing and Validation
+    let validatedData: z.infer<typeof UpdateQuestionInputSchema>;
+    try {
+      const body = await request.json();
+      const validation = UpdateQuestionInputSchema.safeParse(body);
+      if (!validation.success) {
+        throw new BadRequestError(
+          "Invalid request body.",
+          validation.error.flatten().fieldErrors as any
+        );
+      }
+      validatedData = validation.data;
+      // Ensure at least one field is being updated
+      if (Object.keys(validatedData).length === 0) {
+        throw new BadRequestError("No fields provided for update.");
+      }
+    } catch (e) {
+      if (e instanceof SyntaxError)
+        throw new BadRequestError("Invalid JSON format.");
+      if (e instanceof BadRequestError) throw e; // Re-throw Zod/validation error
+      throw e; // Re-throw other parsing errors
+    }
 
-    // Placeholder response
-    return new NextResponse(JSON.stringify({ message: 'Update not yet implemented' }), { status: 501 });
+    // --- Placeholder for service call ---
+    // 4. Authorization & Business Logic (handled by service)
+    const updatedQuestion = await updateQuestion(
+      questionId,
+      validatedData,
+      user
+    );
+    return respondSuccess(updatedQuestion);
+    // return respondError("Update not yet implemented.", 501); // Use this until implemented
+    // --- End Placeholder ---
+  } catch (error: any) {
+    // 5. Centralized Error Handling
+    if (error instanceof ApiError) {
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message, error.errors);
+      if (error instanceof ForbiddenError)
+        return respondForbidden(error.message);
+      if (error instanceof NotFoundError) return respondNotFound(error.message);
+    }
+    if (error.message === "Update functionality not yet implemented.") {
+      // Specific check for placeholder
+      return respondError(error.message, 501);
+    }
+    console.error(
+      `[API PUT /api/questions/${params.questionId}] Error:`,
+      error
+    );
+    return respondError("Failed to update question.");
+  }
 }
 
-
-// --- DELETE Handler (Delete Question - Placeholder) ---
+// DELETE Handler - Delete Question
 export async function DELETE(
-    request: Request,
-    { params }: { params: { questionId: string } }
+  request: Request,
+  { params }: { params: { questionId?: string } }
 ) {
-     const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-    const questionId = params.questionId;
-
-     if (!userId) {
-        return new NextResponse(JSON.stringify({ message: 'Unauthorized' }), { status: 401 });
-    }
-     if (!questionId) {
-        return new NextResponse(JSON.stringify({ message: 'Question ID is required' }), { status: 400 });
+  try {
+    // 1. Authentication
+    const user = await getCurrentUser();
+    if (!user?.id || user.role === undefined) {
+      // Need full user for auth check
+      return respondUnauthorized("Authentication required with valid role.");
     }
 
-    // TODO: Fetch the question to check if the current user is the author OR an admin
-    // TODO: Implement the actual delete logic using prisma.question.delete() - Prisma schema handles cascades
+    // 2. Parameter Validation
+    const { questionId } = params;
+    if (!questionId) {
+      throw new BadRequestError("Question ID parameter is required.");
+    }
 
-    console.log("DELETE request received for question:", questionId, "by user:", userId);
+    // --- Placeholder for service call ---
+    // 3. Authorization & Business Logic (handled by service)
+    await deleteQuestion(questionId, user);
+    return respondSuccess({ message: "Question deleted successfully." }); // Or respondNoContent() if preferred
+    // return respondError("Delete not yet implemented.", 501); // Use this until implemented
+    // --- End Placeholder ---
+  } catch (error: any) {
+    // 4. Centralized Error Handling
+    if (error instanceof ApiError) {
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message);
+      if (error instanceof ForbiddenError)
+        return respondForbidden(error.message);
+      if (error instanceof NotFoundError) return respondNotFound(error.message);
+    }
+    if (error.message === "Delete functionality not yet implemented.") {
+      // Specific check for placeholder
+      return respondError(error.message, 501);
+    }
+    console.error(
+      `[API DELETE /api/questions/${params.questionId}] Error:`,
+      error
+    );
+    return respondError("Failed to delete question.");
+  }
+}
 
-    // Placeholder response
-    return new NextResponse(JSON.stringify({ message: 'Delete not yet implemented' }), { status: 501 });
+// Add explicit handlers for other methods if needed
+export async function POST() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function PATCH() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
 }
