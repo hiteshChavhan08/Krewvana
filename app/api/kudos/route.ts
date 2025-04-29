@@ -1,204 +1,115 @@
 // app/api/kudos/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import prisma from "@/lib/prisma";
-import { KudosCreateSchema } from "@/lib/schemas";
-import { ZodError } from "zod";
-import { Prisma } from "@prisma/client"; // Import Prisma types for transaction
+import { z } from "zod"; // Keep Zod for potential use or if schema is here
+import { getCurrentUser } from "@/lib/auth"; // Use our utility
+import { KudosCreateSchema } from "@/lib/schemas"; // Import the schema
+import {
+  respondSuccess,
+  respondError,
+  respondBadRequest,
+  respondUnauthorized,
+  respondForbidden,
+  respondNotFound,
+  ApiError,
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError, // Import utilities & errors
+} from "@/lib/api/responses";
+import {
+  listKudosFeed,
+  createKudos, // Import service functions
+} from "@/services/kudosService";
+import { Prisma } from "@prisma/client"; // Import Prisma for specific error types
 
-// --- Constants for Points ---
-const POINTS_FOR_GIVING_KUDOS = 1; // Example value
-const POINTS_FOR_RECEIVING_KUDOS = 5; // Example value
-// --- Function to award a badge if not already earned ---
-async function awardBadge(
-  tx: Prisma.TransactionClient,
-  userId: string,
-  badgeId: string
-) {
-  const existingBadge = await tx.userBadge.findUnique({
-    where: { userId_badgeId: { userId, badgeId } },
-  });
-
-  if (!existingBadge) {
-    await tx.userBadge.create({
-      data: { userId, badgeId },
-    });
-
-    // TODO: Add notification logic here later?
-    return true; // Indicate badge was awarded
-  }
-  return false; // Badge already existed
-}
-// --- GET Handler (Remains the same) ---
+// --- GET Handler ---
 export async function GET(request: Request) {
-  // ... same GET logic as before ...
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const take = 20;
   try {
-    const kudosFeed = await prisma.kudos.findMany({
-      take: take,
-      orderBy: { createdAt: "desc" },
-      include: {
-        giver: { select: { id: true, name: true, image: true } },
-        receiver: { select: { id: true, name: true, image: true } },
-      },
-    });
-    return NextResponse.json(kudosFeed, { status: 200 });
-  } catch (error) {
-    console.error("Error fetching Kudos feed:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch Kudos feed" },
-      { status: 500 }
-    );
+    // 1. Authentication (Optional - decide if feed is public or requires login)
+    // const user = await getCurrentUser();
+    // if (!user) return respondUnauthorized();
+
+    // 2. Parse query params (e.g., limit)
+    // For simplicity, using default limit from service for now
+    const limit = 20; // Or parse from request.url searchParams if needed
+
+    // 3. Call Service Function
+    const kudosFeed = await listKudosFeed(limit);
+
+    // 4. Success Response
+    return respondSuccess(kudosFeed);
+  } catch (error: any) {
+    // 5. Centralized Error Handling
+    console.error("[API GET /api/kudos] Error:", error);
+    // Check for specific ApiErrors if listKudosFeed could throw them (unlikely here)
+    return respondError("Failed to fetch Kudos feed.");
   }
 }
 
-// --- POST Handler: Create New Kudos with Points ---
+// --- POST Handler ---
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const giverId = session.user.id;
-
   try {
-    const json = await request.json();
-    const { receiverId, message } = KudosCreateSchema.parse(json);
-
-    if (giverId === receiverId) {
-      return NextResponse.json(
-        { error: "You cannot give Kudos to yourself." },
-        { status: 403 }
-      );
+    // 1. Authentication
+    const user = await getCurrentUser();
+    if (!user?.id) {
+      // Ensure user ID exists
+      return respondUnauthorized();
     }
-    let awardedBadgesInfo: string[] = []; // Track awarded badges for logging/response
-    // --- Use Prisma Transaction ---
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Verify receiver exists (within transaction for consistency)
-      const receiver = await tx.user.findUnique({
-        where: { id: receiverId },
-        select: { id: true },
-      });
-      if (!receiver) {
-        // Throwing an error inside transaction automatically rolls it back
-        throw new Error("Receiver user not found.");
+
+    // 2. Request Body Parsing and Validation
+    let validatedBody: z.infer<typeof KudosCreateSchema>;
+    try {
+      const body = await request.json();
+      const validation = KudosCreateSchema.safeParse(body);
+      if (!validation.success) {
+        throw new BadRequestError(
+          "Invalid request body.",
+          validation.error.flatten().fieldErrors as any
+        );
       }
+      validatedBody = validation.data;
+    } catch (e) {
+      if (e instanceof SyntaxError)
+        throw new BadRequestError("Invalid JSON format.");
+      if (e instanceof BadRequestError) throw e; // Re-throw Zod validation error
+      throw e; // Re-throw other parsing errors
+    }
 
-      // 2. Create the Kudos record
-      const newKudos = await tx.kudos.create({
-        data: {
-          message: message,
-          giverId: giverId,
-          receiverId: receiverId,
-        },
-        include: {
-          // Include details for response
-          giver: { select: { id: true, name: true, image: true } },
-          receiver: { select: { id: true, name: true, image: true } },
-        },
-      });
+    // 3. Authorization & Business Logic (handled by service)
+    const newKudos = await createKudos(validatedBody, user);
 
-      // 3. Update points for the giver
-      await tx.user.update({
-        where: { id: giverId },
-        data: {
-          points: {
-            increment: POINTS_FOR_GIVING_KUDOS,
-          },
-        },
-      });
-      // 3b. Log points for giver
-      await tx.pointLog.create({
-        data: {
-          userId: giverId,
-          pointsAwarded: POINTS_FOR_GIVING_KUDOS,
-          reason: "Gave Kudos",
-          kudosId: newKudos.id, // Link to the created Kudos
-        },
-      });
-      // 4. Update points for the receiver
-      await tx.user.update({
-        where: { id: receiverId },
-        data: {
-          points: {
-            increment: POINTS_FOR_RECEIVING_KUDOS,
-          },
-        },
-      });
-
-      // TODO: Could add PointLog entries here later if using that model
-      // 4b. Log points for receiver
-      await tx.pointLog.create({
-        data: {
-          userId: receiverId,
-          pointsAwarded: POINTS_FOR_RECEIVING_KUDOS,
-          reason: "Received Kudos",
-          kudosId: newKudos.id, // Link to the created Kudos
-        },
-      });
-      // --- 4. Check and Award Badges ---
-
-      // Giver: Check for "First Kudos Given" (ID: 'kudos_giver_1')
-      const giverKudosCount = await tx.kudos.count({
-        where: { giverId: giverId },
-      });
-      if (giverKudosCount === 1) {
-        // Award only on the very first one
-        const awarded = await awardBadge(tx, giverId, "kudos_giver_1");
-        if (awarded) awardedBadgesInfo.push("Giver earned 'First Kudos'");
-      }
-
-      // Receiver: Check for "First Kudos Received" (ID: 'kudos_receiver_1')
-      const receiverKudosCount = await tx.kudos.count({
-        where: { receiverId: receiverId },
-      });
-      if (receiverKudosCount === 1) {
-        // Award only on the very first one
-        const awarded = await awardBadge(tx, receiverId, "kudos_receiver_1");
-        if (awarded) awardedBadgesInfo.push("Receiver earned 'Appreciated'");
-      }
-
-      // Receiver: Check for "5 Kudos Received" (ID: 'kudos_receiver_5')
-      const KUDOS_RECEIVER_5_THRESHOLD = 5;
-      if (receiverKudosCount === KUDOS_RECEIVER_5_THRESHOLD) {
-        // Award when count hits exactly 5
-        const awarded = await awardBadge(tx, receiverId, "kudos_receiver_5");
-        if (awarded)
-          awardedBadgesInfo.push("Receiver earned 'Valued Colleague'");
-      }
-
-      // --- End Badge Awarding ---
-      return newKudos; // Return the created Kudos object from the transaction
-    }); // --- End Prisma Transaction ---
-
-    return NextResponse.json(result, { status: 201 }); // Return Kudos object
+    // 4. Success Response
+    return respondSuccess(newKudos, 201); // 201 Created
   } catch (error: any) {
-    if (error instanceof ZodError) {
-      return NextResponse.json(
-        { error: "Validation failed", details: error.errors },
-        { status: 400 }
-      );
+    // 5. Centralized Error Handling
+    if (error instanceof ApiError) {
+      // Handle specific errors thrown by createKudos service
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message, error.errors);
+      if (error instanceof ForbiddenError)
+        return respondForbidden(error.message); // e.g., self-kudos
+      if (error instanceof NotFoundError) return respondNotFound(error.message); // e.g., receiver not found
     }
-    // Handle specific error from transaction (e.g., receiver not found)
-    if (error.message === "Receiver user not found.") {
-      return NextResponse.json({ error: error.message }, { status: 404 });
-    }
-    // Handle potential Prisma transaction errors or other errors
-    console.error("Error creating Kudos with transaction:", error);
+    // Handle potential Prisma transaction errors separately if needed
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      // Handle specific Prisma errors if needed
-      return NextResponse.json(
-        { error: "Database error occurred." },
-        { status: 500 }
+      console.error(
+        "[API POST /api/kudos] Prisma Error:",
+        error.code,
+        error.message
       );
+      return respondError("Database error occurred during Kudos creation."); // More specific DB error
     }
-    return NextResponse.json(
-      { error: "Failed to create Kudos" },
-      { status: 500 }
-    );
+    console.error("[API POST /api/kudos] Error:", error);
+    return respondError("Failed to create Kudos."); // Generic fallback
   }
+}
+
+// Add explicit handlers for other methods if needed
+export async function PUT() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function DELETE() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function PATCH() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
 }
