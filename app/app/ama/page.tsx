@@ -21,7 +21,7 @@ async function FetchAMAList({ status }: { status: AMASessionStatus }) {
     }
 
     const apiUrl = `${baseUrl}/api/ama/sessions?status=${status}&limit=9`;
-   
+
     const response = await fetch(apiUrl, {
       cache: "no-store",
     });
@@ -103,7 +103,9 @@ export default async function AMAPage() {
       value: "upcoming",
       content: (
         <div className="w-full overflow-hidden relative h-full rounded-2xl p-10 text-xl md:text-4xl font-bold text-white bg-gradient-to-br from-purple-700 to-violet-900">
-          <p className="mb-4">Upcoming tab</p>
+          <div className="mb-4">
+            <p>Upcoming tab</p>
+          </div>
           <UpcomingContent />
         </div>
       ),
@@ -113,7 +115,9 @@ export default async function AMAPage() {
       value: "live",
       content: (
         <div className="w-full overflow-hidden relative h-full rounded-2xl p-10 text-xl md:text-4xl font-bold text-white bg-gradient-to-br from-purple-700 to-violet-900">
-          <p className="mb-4">Live tab</p>
+          <div className="mb-4">
+            <p>Live tab</p>
+          </div>
           <LiveContent />
         </div>
       ),
@@ -123,7 +127,9 @@ export default async function AMAPage() {
       value: "past",
       content: (
         <div className="w-full overflow-hidden relative h-full rounded-2xl p-10 text-xl md:text-4xl font-bold text-white bg-gradient-to-br from-purple-700 to-violet-900">
-          <p className="mb-4">Past tab</p>
+          <div className="mb-4">
+            <p>Past tab</p>
+          </div>
           <PastContent />
         </div>
       ),
