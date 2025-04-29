@@ -1,37 +1,94 @@
-//  lib/auth.ts
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // Adjust path
-import { prisma } from '@/lib/prisma';
-import { User, UserRole } from "@prisma/client"; // Import UserRole
+// lib/auth.ts
+import NextAuth, { type NextAuthOptions, type User, type Session } from 'next-auth';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
+import prisma from '@/lib/prisma';
+import { getServerSession as nextAuthGetServerSession } from "next-auth/next" // Import core function
 
-// Define the return type explicitly to include the role
-type CurrentUserWithRole = User | null; // Or be more specific: Omit<User, 'passwordHash'> | null
+// Your types/next-auth.d.ts should augment Session['user'] with 'id'
+// import { UserRole } from "@prisma/client"; // Example
 
-export async function getCurrentUser(): Promise<CurrentUserWithRole> {
-  const session = await getServerSession(authOptions);
+type Credentials = Record<"email" | "password", string> | undefined;
 
-  if (!session?.user?.email) {
-    console.log("getCurrentUser: No session or email found");
-    return null;
-  }
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials): Promise<User | null> {
+        if (!credentials?.email || !credentials?.password) { return null; }
+        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+        if (!user || !user.passwordHash) { return null; }
+        const isValidPassword = await bcrypt.compare(credentials.password, user.passwordHash);
+        if (!isValidPassword) { return null; }
+        // Important: Return only fields needed for JWT/Session initially
+        // The 'id' is crucial here for the callbacks
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          // Do NOT return passwordHash here!
+          // role: user.role, // Include role if needed in JWT/session
+        };
+      },
+    }),
+    // Add other providers later
+  ],
+  session: { strategy: 'jwt' },
+  callbacks: {
+    async jwt({ token, user }) {
+      // On sign-in, persist the user id (and role) to the token
+      if (user) {
+        token.sub = user.id; // 'sub' is standard JWT claim for subject (user ID)
+        // if (user.role) token.role = user.role; // Add role if available on User object from authorize
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      // Add properties from the JWT token (like id and role) to the session object
+      if (session.user && token.sub) {
+        session.user.id = token.sub; // Add id from token.sub
+        // if (token.role) session.user.role = token.role as UserRole; // Add role from token
+      }
+      return session;
+    },
+  },
+  pages: { signIn: '/auth/signin' },
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
+};
 
-  try {
-    const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      // *** Ensure 'role' is included in the select or is fetched by default ***
-      // If you use 'select', you MUST include 'role':
-      // select: { id: true, name: true, email: true, image: true, role: true, points: true /* other needed fields */ }
-    });
+// --- Server-Side Session Utilities ---
 
-    if (!currentUser) {
-      console.log(`getCurrentUser: User not found for email: ${session.user.email}`);
-      return null;
-    }
+/**
+ * Retrieves the full session object on the server side.
+ * Use this in Route Handlers, Server Actions, Server Components.
+ * @returns {Promise<Session | null>} The session object or null if not authenticated.
+ */
+export const getCurrentSession = async (): Promise<Session | null> => {
+  // Use the renamed import to avoid conflict with our function name
+  return await nextAuthGetServerSession(authOptions);
+};
 
-    return currentUser;
+/**
+ * Retrieves the authenticated user object from the session on the server side.
+ * Use this in Route Handlers, Server Actions, Server Components.
+ * Ensures type safety based on your augmented Session interface.
+ * @returns {Promise<Session['user'] | null>} The user object or null if not authenticated.
+ */
+export const getCurrentUser = async (): Promise<Session['user'] | null> => {
+  const session = await getCurrentSession();
+  // Ensure you return null if session or session.user is null/undefined
+  return session?.user ?? null;
+};
 
-  } catch (error) {
-      console.error("Error fetching current user:", error);
-      return null;
-  }
-}
+
+// --- Re-export NextAuth handlers ---
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
