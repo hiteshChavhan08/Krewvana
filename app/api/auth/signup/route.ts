@@ -1,71 +1,77 @@
 // app/api/auth/signup/route.ts
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
-import { UserRole } from '@prisma/client'; // Import UserRole enum
-
-const SALT_ROUNDS = 10; // Cost factor for bcrypt hashing
-
-// Server-side validation schema (doesn't need confirmPassword)
-const userSignupSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters' }).max(100),
-  email: z.string().email({ message: 'Please enter a valid email address' }),
-  // Add password complexity requirements if desired
-  password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
-});
+import { NextResponse } from "next/server"; // Keep for 405 handler
+import { z } from "zod"; // Keep for instanceof check
+import { UserSignupSchema } from "@/lib/schemas"; // Import shared schema
+import {
+  respondSuccess,
+  respondError,
+  respondBadRequest,
+  respondConflict, // Add respondConflict
+  ApiError,
+  BadRequestError,
+  ConflictError, // Import errors
+} from "@/lib/api/responses";
+import { signupUser } from "@/services/authService"; // Import the service function
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
-    // 1. Validate Input
-    const validation = userSignupSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ errors: validation.error.flatten() }, { status: 400 });
-    }
-    const { name, email, password } = validation.data;
-
-    // 2. Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }, // Check case-insensitively if desired by DB collation, or normalize here
-    });
-
-    if (existingUser) {
-      return NextResponse.json({ message: 'An account with this email already exists.' }, { status: 409 }); // 409 Conflict
-    }
-
-    // 3. Hash Password
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-
-    // 4. Create User in Database
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(), // Store email in lowercase for consistency
-        passwordHash: hashedPassword,
-        role: UserRole.USER, // Default role
-        // emailVerified: null, // Email not verified initially
-      },
-      // Select only non-sensitive fields to return
-      select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          createdAt: true,
+    // 1. Request Body Parsing and Validation
+    let validatedBody: z.infer<typeof UserSignupSchema>;
+    try {
+      const body = await req.json();
+      // Use safeParse for better error handling within the handler
+      const validation = UserSignupSchema.safeParse(body);
+      if (!validation.success) {
+        // Use flatten to get a map of field errors
+        throw new BadRequestError(
+          "Validation failed",
+          validation.error.flatten().fieldErrors as any
+        );
       }
-    });
-
-    // 5. Return Success Response (don't return passwordHash)
-    return NextResponse.json(newUser, { status: 201 }); // 201 Created
-
-  } catch (error) {
-    console.error("Signup API Error:", error);
-     if (error instanceof z.ZodError) { // Should be caught by safeParse, but belt-and-suspenders
-        return NextResponse.json({ errors: error.flatten() }, { status: 400 });
+      validatedBody = validation.data; // Contains validated and transformed (lowercase email) data
+    } catch (e) {
+      if (e instanceof SyntaxError)
+        throw new BadRequestError("Invalid JSON format.");
+      if (e instanceof BadRequestError) throw e; // Re-throw our validation error
+      // Catch potential ZodErrors from direct .parse() if not using safeParse initially
+      if (e instanceof z.ZodError) {
+        throw new BadRequestError(
+          "Validation failed.",
+          e.flatten().fieldErrors as any
+        );
       }
-    // Handle potential Prisma errors (e.g., unique constraint violation if check failed somehow)
-    return NextResponse.json({ message: 'An unexpected error occurred during signup.' }, { status: 500 });
+      throw e; // Re-throw other parsing errors
+    }
+
+    // 2. Business Logic (handled by service)
+    const newUser = await signupUser(validatedBody);
+
+    // 3. Success Response
+    return respondSuccess(newUser, 201); // 201 Created
+  } catch (error: any) {
+    // 4. Centralized Error Handling
+    if (error instanceof ApiError) {
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message, error.errors);
+      if (error instanceof ConflictError) return respondConflict(error.message); // Handle 409
+      // Add other specific ApiError checks if needed
+    }
+    console.error("[API POST /api/auth/signup] Error:", error);
+    // Use generic error response utility
+    return respondError("An unexpected error occurred during signup.");
   }
+}
+
+// Add explicit handlers for other methods to return 405 Method Not Allowed
+export async function GET() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function PUT() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function DELETE() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function PATCH() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
 }
