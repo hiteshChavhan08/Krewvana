@@ -13,7 +13,7 @@ declare module "next-auth" {
     user: {
       /** The user's database id. */
       id: string;
-      // role: UserRole; // Add custom fields like role
+      role: UserRole; // Add custom fields like role
     } & DefaultSession["user"]; // Keep the default fields
   }
 

@@ -1,179 +1,132 @@
 // app/api/ama/questions/[questionId]/route.ts
-import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { AMASessionStatus, UserRole } from "@prisma/client";
+import { getCurrentUser } from "@/lib/auth"; // Your session utility
+import {
+  respondSuccess,
+  respondNoContent,
+  respondError,
+  respondBadRequest,
+  respondUnauthorized,
+  respondForbidden,
+  respondNotFound,
+  ApiError,
+  BadRequestError, // Import response utilities and custom errors
+} from "@/lib/api/responses";
+import {
+  updateAmaQuestion,
+  deleteAmaQuestion, // Import service functions
+} from "@/services/amaService";
 
-// Schema for updating a question (approval or answer)
-const updateQuestionSchema = z.object({
-  isApproved: z.boolean().optional(),
-  answerText: z.string().min(1).max(5000).optional(), // Optional answer text
-});
+// Schema for validating the request body for updates
+const updateQuestionBodySchema = z
+  .object({
+    isApproved: z.boolean().optional(),
+    answerText: z.string().min(0).max(5000).optional(), // Allow empty string for clearing
+  })
+  .strict(); // Use strict to prevent unknown fields
 
-// Helper function to check if user is host or admin (implement actual admin check later)
-async function canModerateQuestion(
-  userId: string,
-  questionId: string
-): Promise<boolean> {
-  try {
-    const [question, currentUser] = await Promise.all([
-      prisma.aMAQuestion.findUnique({
-        where: { id: questionId },
-        select: { session: { select: { hostId: true } } }, // Get hostId via session relation
-      }),
-      prisma.user.findUnique({
-        // Get current user's role
-        where: { id: userId },
-        select: { role: true },
-      }),
-    ]);
-
-    if (!question?.session?.hostId || !currentUser) return false;
-
-    const isHost = question.session.hostId === userId;
-    const isAdmin = currentUser.role === UserRole.ADMIN;
-
-    return isHost || isAdmin; // Allow if Host OR Admin
-  } catch (error) {
-    return false;
-  }
-}
-
-// PUT Handler - Approve a question or Add/Update an Answer
+// PUT Handler - Update (Approve/Answer) a question
 export async function PUT(
   req: Request,
-  { params }: { params: { questionId: string } }
+  { params }: { params: { questionId?: string } } // Make questionId optional for param check
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    // 1. Authentication
+    const user = await getCurrentUser(); // Assume this returns user with id and role
+    if (!user) return respondUnauthorized();
 
+    // 2. Parameter Validation
     const { questionId } = params;
     if (!questionId) {
-      return NextResponse.json(
-        { message: "Question ID required" },
-        { status: 400 }
-      );
+      throw new BadRequestError("Question ID parameter is required.");
     }
 
-    // Authorization check: Only Host or Admin can update
-    const canModerate = await canModerateQuestion(user.id, questionId);
-    if (!canModerate) {
-      return new NextResponse("Forbidden: You cannot moderate this question", {
-        status: 403,
-      });
-    }
-
-    const body = await req.json();
-    const validation = updateQuestionSchema.safeParse(body);
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { errors: validation.error.errors },
-        { status: 400 }
-      );
-    }
-
-    const { isApproved, answerText } = validation.data;
-
-    // Construct update data carefully
-    let updateData: any = {};
-    if (isApproved !== undefined) {
-      updateData.isApproved = isApproved;
-    }
-    if (answerText !== undefined) {
-      // If setting answer text, also set answeredBy and answeredAt
-      updateData.answerText = answerText.trim() || null; // Allow empty string to clear answer? Or trim?
-      updateData.answeredById = answerText.trim() ? user.id : null;
-      updateData.answeredAt = answerText.trim() ? new Date() : null;
-      // Typically, answering implies approval (adjust if needed)
-      if (answerText.trim() && isApproved === undefined) {
-        updateData.isApproved = true;
+    // 3. Request Body Parsing and Validation
+    let validatedBody: z.infer<typeof updateQuestionBodySchema>;
+    try {
+      const body = await req.json();
+      const validation = updateQuestionBodySchema.safeParse(body);
+      if (!validation.success) {
+        throw new BadRequestError(
+          "Invalid request body.",
+          validation.error.errors
+        );
       }
+      validatedBody = validation.data;
+    } catch (e) {
+      if (e instanceof SyntaxError)
+        throw new BadRequestError("Invalid JSON format.");
+      throw e; // Re-throw other parsing errors or the BadRequestError from validation
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { message: "No update fields provided (isApproved or answerText)" },
-        { status: 400 }
-      );
+    // 4. Authorization & Business Logic (handled by service)
+    const updatedQuestion = await updateAmaQuestion(
+      questionId,
+      validatedBody,
+      user
+    );
+
+    // 5. Success Response
+    return respondSuccess(updatedQuestion);
+  } catch (error: any) {
+    // 6. Centralized Error Handling
+    if (error instanceof ApiError) {
+      // Handle specific custom API errors
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message, error.errors);
+      if (error.status === 401) return respondUnauthorized(error.message);
+      if (error.status === 403) return respondForbidden(error.message);
+      if (error.status === 404) return respondNotFound(error.message);
     }
-
-    const updatedQuestion = await prisma.aMAQuestion.update({
-      where: { id: questionId },
-      data: updateData,
-      include: {
-        // Include data needed for UI update
-        submittedBy: { select: { id: true, name: true, image: true } },
-        answeredBy: { select: { id: true, name: true, image: true } },
-      },
-    });
-
-    // Anonymize submitter if needed before sending back
-    const responseData = {
-      ...updatedQuestion,
-      submittedBy: updatedQuestion.isAnonymous
-        ? null
-        : updatedQuestion.submittedBy,
-      submittedById: updatedQuestion.isAnonymous
-        ? null
-        : updatedQuestion.submittedById,
-    };
-
-    // TODO: Notify submitter if their question was answered/approved?
-
-    return NextResponse.json(responseData);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ errors: error.errors }, { status: 400 });
+    if (error.code === "P2025") {
+      // Example: Prisma RecordNotFound
+      return respondNotFound("AMA Question");
     }
-    console.error(`Error updating question ${params.questionId}:`, error);
-    // Handle potential Prisma errors (e.g., record not found)
-    return new NextResponse("Internal Server Error", { status: 500 });
+    // Log unexpected errors
+    console.error(
+      `[API PUT /api/ama/questions/${params.questionId}] Error:`,
+      error
+    );
+    return respondError("Failed to update question."); // Generic fallback
   }
 }
 
 // DELETE Handler - Delete a Question
 export async function DELETE(
-  req: Request, // Not used but required by signature
-  { params }: { params: { questionId: string } }
+  req: Request, // Keep req for signature consistency if needed
+  { params }: { params: { questionId?: string } }
 ) {
   try {
+    // 1. Authentication
     const user = await getCurrentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    if (!user) return respondUnauthorized();
 
+    // 2. Parameter Validation
     const { questionId } = params;
     if (!questionId) {
-      return NextResponse.json(
-        { message: "Question ID required" },
-        { status: 400 }
-      );
+      throw new BadRequestError("Question ID parameter is required.");
     }
 
-    // Authorization check: Only Host or Admin can delete
-    const canModerate = await canModerateQuestion(user.id, questionId);
-    if (!canModerate) {
-      return new NextResponse("Forbidden: You cannot delete this question", {
-        status: 403,
-      });
+    // 3. Authorization & Business Logic (handled by service)
+    await deleteAmaQuestion(questionId, user);
+
+    // 4. Success Response
+    return respondNoContent();
+  } catch (error: any) {
+    // 5. Centralized Error Handling (similar to PUT)
+    if (error instanceof ApiError) {
+      if (error.status === 401) return respondUnauthorized(error.message);
+      if (error.status === 403) return respondForbidden(error.message);
+      if (error.status === 404) return respondNotFound(error.message);
     }
-
-    // Perform deletion
-    await prisma.aMAQuestion.delete({
-      where: { id: questionId },
-    });
-
-    // TODO: Notify submitter if their question was deleted? (Maybe not necessary)
-
-    return new NextResponse(null, { status: 204 }); // No Content on success
-  } catch (error) {
-    console.error(`Error deleting question ${params.questionId}:`, error);
-    // Handle potential Prisma errors (e.g., record not found)
-    return new NextResponse("Internal Server Error", { status: 500 });
+    if (error.code === "P2025") {
+      // Example: Prisma RecordNotFound
+      return respondNotFound("AMA Question");
+    }
+    console.error(
+      `[API DELETE /api/ama/questions/${params.questionId}] Error:`,
+      error
+    );
+    return respondError("Failed to delete question.");
   }
 }

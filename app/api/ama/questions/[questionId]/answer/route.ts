@@ -1,100 +1,112 @@
 // app/api/ama/questions/[questionId]/answer/route.ts
 
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { prisma } from '@/lib/prisma'; // Adjust path if needed
-import { getCurrentUser } from '@/lib/auth'; // Adjust path if needed
-import { UserRole } from '@prisma/client';
-import type { AMAQuestionData } from '@/types/types'; // Import shared type
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  respondSuccess,
+  respondError,
+  respondBadRequest,
+  respondUnauthorized,
+  respondForbidden,
+  respondNotFound,
+  ApiError,
+  BadRequestError, // Import response utilities and custom errors
+} from "@/lib/api/responses";
+import { answerAmaQuestion } from "@/services/amaService"; // Import the new service function
+import { NextResponse } from "next/server";
 
 // Define the expected request body schema using Zod
-const answerSchema = z.object({
-  answerText: z.string().trim().min(1, { message: "Answer text cannot be empty." }).max(5000, { message: "Answer cannot exceed 5000 characters." }), // Add reasonable max length
-});
+const answerBodySchema = z
+  .object({
+    answerText: z
+      .string()
+      .trim()
+      .min(1, "Answer text cannot be empty.")
+      .max(5000),
+  })
+  .strict(); // Use strict to avoid unexpected fields
 
-// PATCH Handler Function
+// PATCH Handler Function - Add/Update an answer
 export async function PATCH(
   request: Request,
-  { params }: { params: { questionId: string } }
+  { params }: { params: { questionId?: string } } // Make questionId optional for param check
 ) {
   try {
-    // 1. Authentication & Authorization Check
-    const currentUser = await getCurrentUser(); // Get session info
-    if (!currentUser) {
-      return NextResponse.json({ message: 'Authentication required' }, { status: 401 });
+    // 1. Authentication
+    const user = await getCurrentUser(); // Ensure user includes id and role
+    if (!user || user.role === undefined) {
+      // Also check role existence for service function
+      return respondUnauthorized("Authentication required with valid role.");
     }
 
-    const { questionId } = await params;
+    // 2. Parameter Validation
+    const { questionId } = params;
     if (!questionId) {
-        return NextResponse.json({ message: 'Question ID is required' }, { status: 400 });
+      throw new BadRequestError("Question ID parameter is required.");
     }
 
-    // 2. Validate Request Body
-    let validatedData;
+    // 3. Request Body Parsing and Validation
+    let validatedBody: z.infer<typeof answerBodySchema>;
     try {
-        const body = await request.json();
-        validatedData = answerSchema.parse(body);
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            return NextResponse.json({ message: 'Invalid request body', errors: error.errors }, { status: 400 });
-        }
-        // Handle cases where body isn't valid JSON
-        return NextResponse.json({ message: 'Invalid request body format' }, { status: 400 });
-    }
-
-    // 3. Fetch the Question and Session Host ID
-    const question = await prisma.aMAQuestion.findUnique({
-      where: { id: questionId },
-      select: { // Select only needed fields for authorization
-        id: true,
-        sessionId: true,
-        session: {
-          select: {
-            hostId: true,
-          }
-        }
+      const body = await request.json();
+      const validation = answerBodySchema.safeParse(body);
+      if (!validation.success) {
+        throw new BadRequestError(
+          "Invalid request body.",
+          validation.error.errors
+        );
       }
-    });
-
-    if (!question) {
-      return NextResponse.json({ message: 'Question not found' }, { status: 404 });
+      validatedBody = validation.data;
+    } catch (e) {
+      if (e instanceof SyntaxError)
+        throw new BadRequestError("Invalid JSON format.");
+      throw e; // Re-throw other parsing/validation errors
     }
 
-    // 4. Check if the User is Authorized (Host or Admin)
-    const isHost = currentUser.id === question.session.hostId;
-    const isAdmin = currentUser.role === UserRole.ADMIN;
+    // 4. Authorization & Business Logic (handled by service)
+    // Pass validated answer text and the authenticated user (moderator)
+    const updatedQuestion = await answerAmaQuestion(
+      questionId,
+      validatedBody.answerText,
+      user // Pass the whole user object as AuthenticatedUser
+    );
 
-    if (!isHost && !isAdmin) {
-      return NextResponse.json({ message: 'User not authorized to answer this question' }, { status: 403 });
+    // 5. Success Response
+    // The service function returns the correctly structured and potentially anonymized data
+    return respondSuccess(updatedQuestion);
+  } catch (error: any) {
+    // 6. Centralized Error Handling
+    if (error instanceof ApiError) {
+      // Handle specific custom API errors thrown by the service or validation
+      if (error instanceof BadRequestError)
+        return respondBadRequest(error.message, error.errors);
+      if (error.status === 401) return respondUnauthorized(error.message); // Should be caught earlier
+      if (error.status === 403) return respondForbidden(error.message);
+      if (error.status === 404) return respondNotFound(error.message); // For question not found
     }
-
-    // 5. Update the Question in the Database
-    const updatedQuestion = await prisma.aMAQuestion.update({
-      where: { id: questionId },
-      data: {
-        answerText: validatedData.answerText,
-        answeredAt: new Date(),
-        answeredById: currentUser.id, // Link the answer to the current user
-      },
-      // Include relations needed by the frontend card component
-      include: {
-        submittedBy: { select: { id: true, name: true, image: true } },
-        answeredBy: { select: { id: true, name: true, image: true } },
-      }
-    });
-
-    // 6. Return the Updated Question Data
-    return NextResponse.json(updatedQuestion as AMAQuestionData, { status: 200 }); // Cast to ensure type safety for response
-
-  } catch (error) {
-    console.error("API Error - PATCH /api/ama/questions/[questionId]/answer:", error);
-    // Generic error for unexpected issues
-    return NextResponse.json({ message: 'An error occurred while submitting the answer.' }, { status: 500 });
+    if (error.code === "P2025") {
+      // Handle Prisma RecordNotFound explicitly if service missed it
+      return respondNotFound("AMA Question");
+    }
+    // Log unexpected errors
+    console.error(
+      `[API PATCH /api/ama/questions/${params.questionId}/answer] Error:`,
+      error
+    );
+    return respondError("Failed to submit answer."); // Generic fallback
   }
 }
 
-// Optional: Add handler for other methods if needed, otherwise they default to 405 Method Not Allowed
-// export async function GET(request: Request, { params }: { params: { questionId: string } }) {
-//   return NextResponse.json({ message: 'Method Not Allowed' }, { status: 405 });
-// }
-// export async function POST(...) etc.
+// Add explicit handlers for other methods to return 405 Method Not Allowed
+export async function GET() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function POST() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function PUT() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
+export async function DELETE() {
+  return NextResponse.json({ message: "Method Not Allowed" }, { status: 405 });
+}
