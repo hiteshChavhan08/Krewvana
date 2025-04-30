@@ -37,21 +37,24 @@ async function searchUsers(
   query: string,
   excludeId?: string
 ): Promise<SimpleUser[]> {
+  // Return type is correct (array of users)
   if (!query) return [];
   try {
-    // Construct the API URL, excluding the user if specified
     let apiUrl = `/api/users?limit=10&search=${encodeURIComponent(query)}`;
     if (excludeId) {
-      apiUrl += `&excludeId=${excludeId}`; // Add excludeId param if provided
+      apiUrl += `&excludeId=${excludeId}`;
     }
 
     const response = await fetch(apiUrl);
     if (!response.ok) {
       console.error("Failed to fetch users:", response.statusText);
-      return []; // Return empty on error
+      return [];
     }
-    const users = await response.json();
-    return users as SimpleUser[]; // Assume API returns SimpleUser[]
+    // 👇 *** THE FIX IS HERE *** 👇
+    const result = await response.json(); // Get the full object { data: [], pagination: {} }
+    // Return the 'data' array, or an empty array if 'data' is missing/null
+    return (result?.data || []) as SimpleUser[];
+    // 👆 *** END OF FIX *** 👆
   } catch (error) {
     console.error("Error searching users:", error);
     return [];

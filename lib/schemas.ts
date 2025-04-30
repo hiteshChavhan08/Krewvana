@@ -17,11 +17,9 @@ export const LearningResourceCreateSchema = z.object({
     .string()
     .min(3, "Title must be at least 3 characters")
     .max(150, "Title too long"),
-  url: z
-    .string()
-    .url({
-      message: "Please enter a valid URL (including http:// or https://)",
-    }),
+  url: z.string().url({
+    message: "Please enter a valid URL (including http:// or https://)",
+  }),
   description: z
     .string()
     .max(1000, "Description too long")
@@ -84,3 +82,26 @@ export const UserSignupSchema = z
     // Note: confirmPassword is usually only needed on the client-side form
   })
   .strict(); // Use strict to prevent unexpected fields in the request body
+
+// Schema for client-side checks (matches backend ideally)
+export const ClientProfileUpdateSchema = z
+  .object({
+    name: z.string().min(1, "Name cannot be empty").max(100).trim(),
+    // Allow empty strings from textarea/input using .or(z.literal(""))
+    hobbies: z
+      .string()
+      .max(500, "Hobbies text too long")
+      .optional()
+      .or(z.literal("")),
+    favoriteFood: z
+      .string()
+      .max(100, "Favorite food text too long")
+      .optional()
+      .or(z.literal("")),
+    askMeAbout: z
+      .string()
+      .max(200, "Ask me about text too long")
+      .optional()
+      .or(z.literal("")),
+  })
+  .strict(); // Prevent extra fields
