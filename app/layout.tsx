@@ -1,9 +1,10 @@
-// app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner"; // Or sonner
 import Providers from "./providers";
+import NotificationPopup from "@/components/notification/NotificationPopup";
+import WebSocketInitializer from "@/components/notification/WebSocketInitializer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,8 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           {children}
+          <WebSocketInitializer />
+          <NotificationPopup />
           <Toaster richColors position="bottom-right" />
         </Providers>
       </body>

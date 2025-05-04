@@ -128,6 +128,7 @@ export function AppSidebarLayout({ children, user }: AppSidebarLayoutProps) {
               onClick={() => {
                 console.log("Logout button clicked..."); // Add for debugging
                 signOut({ callbackUrl: "/auth/signin" });
+                localStorage.clear();
               }}
               // Apply styles mimicking SidebarLink - ADJUST THESE CLASSES AS NEEDED
               className={getLinkStyles(open)}

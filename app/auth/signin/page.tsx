@@ -41,6 +41,9 @@ export default function SignIn() {
           : "Sign in failed. Please try again.";
       toast.error("Sign In Failed", { description: errorMessage });
     } else if (result?.ok) {
+      // Set the flag to localStorage after successful sign-in
+      localStorage.setItem("isSignedIn", "true");
+
       toast.success("Sign In Successful", { description: "Welcome back!" });
       setTimeout(() => router.push(callbackUrl), 500); // Redirect after slight delay
     } else {
