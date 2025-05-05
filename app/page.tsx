@@ -7,7 +7,7 @@ import Link from "next/link";
 
 export default function LandingPage() {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col">
       <main className="flex-grow">
         <Link href={"/app"}>Use APP</Link>
       </main>

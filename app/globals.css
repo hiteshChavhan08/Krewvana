@@ -45,25 +45,32 @@
   --radius-xl: calc(var(--radius) + 4px);
   --animate-shiny-text: shiny-text 8s infinite;
   @keyframes shiny-text {
-  0%, 90%, 100% {
-    background-position: calc(-100% - var(--shiny-width)) 0;
+    0%,
+    90%,
+    100% {
+      background-position: calc(-100% - var(--shiny-width)) 0;
     }
-  30%, 60% {
-    background-position: calc(100% + var(--shiny-width)) 0;
+    30%,
+    60% {
+      background-position: calc(100% + var(--shiny-width)) 0;
     }
   }
-  --animate-shine: shine var(--duration) infinite linear
-;
+  --animate-shine: shine var(--duration) infinite linear;
   --color-highlight: var(----highlight);
   --color-brand: var(----brand);
   --color-destructive-foreground: var(--destructive-foreground);
   @keyframes shine {
-  0% {
-    background-position: 0% 0%;}
-  50% {
-    background-position: 100% 100%;}
-  to {
-    background-position: 0% 0%;}}}
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    to {
+      background-position: 0% 0%;
+    }
+  }
+}
 
 :root {
   --radius: 0.625rem;
@@ -179,7 +186,8 @@
   --chart-5: hsl(27 87% 67%);
   --radius: 0.6rem;
   --brand: hsl(217.2 91.2% 59.8%);
-  --highlight: hsl(47.9 95.8% 53.1%);}
+  --highlight: hsl(47.9 95.8% 53.1%);
+}
 
 [data-registry="plate"].dark {
   --background: hsl(0 0% 3.9%);
@@ -207,31 +215,39 @@
   --chart-4: hsl(280 65% 60%);
   --chart-5: hsl(340 75% 55%);
   --brand: hsl(213.3 93.9% 67.8%);
-  --highlight: hsl(48 96% 53%);}
+  --highlight: hsl(48 96% 53%);
+}
 
-  .dark ::selection {
-    background-color: hsl(217, 91%, 59%); /* Example: a bright blue */
-    color: hsl(0, 0%, 100%); /* White text */
-  }
+.dark ::selection {
+  background-color: hsl(217, 91%, 59%); /* Example: a bright blue */
+  color: hsl(0, 0%, 100%); /* White text */
+}
 
-  .dark .plate-toolbar {
-    background-color: hsl(0, 0%, 14.9%); /* Dark background */
-    color: hsl(0, 0%, 98%); /* Light text */
-    border: 1px solid hsl(0, 0%, 25%); /* Slightly lighter border */
-  }
+.dark .plate-toolbar {
+  background-color: hsl(0, 0%, 14.9%); /* Dark background */
+  color: hsl(0, 0%, 98%); /* Light text */
+  border: 1px solid hsl(0, 0%, 25%); /* Slightly lighter border */
+}
 
-  /* Style toolbar buttons in dark mode */
-  .dark .plate-toolbar button {
-    background-color: hsl(0, 0%, 20%);
-    color: hsl(0, 0%, 98%);
-    border: none;
-    margin: 0 4px;
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
+/* Style toolbar buttons in dark mode */
+.dark .plate-toolbar button {
+  background-color: hsl(0, 0%, 20%);
+  color: hsl(0, 0%, 98%);
+  border: none;
+  margin: 0 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
-  /* Hover effect for toolbar buttons in dark mode */
-  .dark .plate-toolbar button:hover {
-    background-color: hsl(0, 0%, 25%);
-  }
+/* Hover effect for toolbar buttons in dark mode */
+.dark .plate-toolbar button:hover {
+  background-color: hsl(0, 0%, 25%);
+}
+
+html,
+body {
+  height: 100%; /* Ensure html and body can take full height */
+  overflow: hidden; /* Try forcing body overflow hidden */
+  /* Or try overflow: visible; on body if hidden causes issues */
+}

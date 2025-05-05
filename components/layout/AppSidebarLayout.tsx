@@ -39,8 +39,8 @@ const navItems: NavItem[] = [
   { href: "/app/leaderboard", label: "Leaderboard", icon: Users },
   { href: "/app/wellness", label: "Wellness", icon: HeartPulseIcon },
   { href: "/app/learning", label: "Learning", icon: Lightbulb },
-  { href: "/app/ama", label: "AMA", icon: MessageCircleQuestion  },
-  { href: "/app/qna", label: "QNA", icon: MessageCircleQuestion  },
+  { href: "/app/ama", label: "AMA", icon: MessageCircleQuestion },
+  { href: "/app/qna", label: "QNA", icon: MessageCircleQuestion },
 ];
 
 // Map NavItem[] to the format expected by SidebarLink
@@ -99,6 +99,7 @@ export function AppSidebarLayout({ children, user }: AppSidebarLayoutProps) {
     <div
       className={cn(
         "flex h-screen w-full flex-col md:flex-row", // <-- mobile-first column, desktop row
+        "min-w-0",
         "overflow-hidden border border-neutral-200 bg-gray-100 dark:border-neutral-700 dark:bg-neutral-900"
       )}
     >
@@ -131,15 +132,12 @@ export function AppSidebarLayout({ children, user }: AppSidebarLayoutProps) {
               }}
               // Apply styles mimicking SidebarLink - ADJUST THESE CLASSES AS NEEDED
               className={getLinkStyles(open)}
+              aria-label={open ? undefined : "Logout"}
             >
               {/* Icon */}
               <LogOut className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
               {/* Label - conditionally render based on 'open' state */}
-              {open && (
-                <span className="text-neutral-700 dark:text-neutral-200">
-                  Logout
-                </span>
-              )}
+              {open && <span>Logout</span>}
               {/* Tooltip or aria-label when closed might be needed for accessibility */}
             </button>
 

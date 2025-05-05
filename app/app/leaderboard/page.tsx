@@ -101,8 +101,9 @@ export default function LeaderboardPage() {
     <WarpBackground className="container mx-auto">
       {/* <div className=""> */}
         <div className="relative z-10">
-          <h1 className="text-3xl md:text-4xl font-bold mb-10 text-center ...">
-            <Trophy className="h-8 w-8 text-yellow-500" /> Leaderboard
+          <h1 className="text-3xl md:text-4xl font-bold mb-30 text-center">
+            <Trophy className="h-8 w-8 text-yellow-500" /> 
+            <span className="">Leaderboard</span>
           </h1>
 
           {topThree.length >= 1 && <TopThreePodium users={topThree} />}

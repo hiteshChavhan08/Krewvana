@@ -1,10 +1,12 @@
+// schema.prisma
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  // output   = "../node_modules/.prisma/client" // Default output location
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" // Or your chosen database provider
   url      = env("DATABASE_URL")
 }
 
@@ -49,16 +51,46 @@ enum AMASessionStatus {
 }
 
 enum UserRole {
-  USER  // Regular user, default
+  USER // Regular user, default
   ADMIN // Platform administrator
 }
 
-// ++ Q&A Feature Enums ++
 enum VoteType {
   UPVOTE
   // DOWNVOTE // Keep commented out unless downvoting is explicitly added
 }
-// ++ End Q&A Enums ++
+
+// ++ SUGGESTED: Enum for Point Log reasons ++
+enum PointLogType {
+  KUDOS_GIVEN
+  KUDOS_RECEIVED
+  ANSWER_ACCEPTED_AUTHOR // Points for the answer author
+  ANSWER_ACCEPTED_SELECTOR // Points for the question author who accepted (if any)
+  QUESTION_UPVOTE // If voting gives points
+  ANSWER_UPVOTE // If voting gives points
+  PROFILE_COMPLETION
+  MENTORSHIP_COMPLETED_MENTOR
+  MENTORSHIP_COMPLETED_MENTEE
+  BADGE_EARNED
+  IDEA_SUBMITTED
+  RESOURCE_SUBMITTED
+  OTHER // Generic catch-all
+}
+
+// ++ SUGGESTED: Enum for Notification types ++
+enum NotificationType {
+  KUDOS_RECEIVED
+  ANSWER_ON_QUESTION
+  QUESTION_ACCEPTED_ANSWER // Notify question author when answer accepted
+  MENTORSHIP_REQUEST_RECEIVED
+  MENTORSHIP_REQUEST_ACCEPTED
+  MENTORSHIP_MEMBER_JOINED
+  MENTORSHIP_CIRCLE_STARTING // Reminder maybe?
+  BADGE_EARNED
+  AMA_QUESTION_ANSWERED
+  NEW_COMMENT // If comments are added later
+  OTHER
+}
 
 // --- Auth Models ---
 model Account {
@@ -77,6 +109,7 @@ model Account {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId]) // Add index
 }
 
 model Session {
@@ -85,6 +118,8 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId]) // Add index
 }
 
 model User {
@@ -96,7 +131,7 @@ model User {
   passwordHash  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  role          UserRole  @default(USER)
+  role          UserRole  @default(USER) // Platform Admin/User role
 
   // Engagement Profile
   points       Int     @default(0)
@@ -104,30 +139,43 @@ model User {
   favoriteFood String?
   askMeAbout   String?
 
+  // ++ NEW: Job Position ++
+  positionId String? // Foreign key for the user's primary position
+  isPositionVerified Boolean   @default(false)
+  position   Position? @relation(fields: [positionId], references: [id], onDelete: SetNull) // Allow user to exist without a position
+
   // Relations to Auth
   accounts Account[]
   sessions Session[]
 
   // Relations to Engagement Features
-  sentKudos                  Kudos[]            @relation("KudosGiver")
-  receivedKudos              Kudos[]            @relation("KudosReceiver")
-  PointLog                   PointLog[]
-  submittedLearningResources LearningResource[] @relation("SubmittedByUser")
-  submittedInnovationIdeas   InnovationIdea[]   @relation("SubmittedByUser")
+  sentKudos                  Kudos[]                  @relation("KudosGiver")
+  receivedKudos              Kudos[]                  @relation("KudosReceiver")
+  pointLogs                  PointLog[] // Renamed for clarity
+  submittedLearningResources LearningResource[]       @relation("SubmittedByUser")
+  submittedInnovationIdeas   InnovationIdea[]         @relation("SubmittedByUser")
   userBadges                 UserBadge[]
-  shoutoutsSubmitted         Shoutout[]         @relation("SubmittedBy")
-  shoutoutsRelatedTo         Shoutout[]         @relation("RelatedUser")
-  createdCircles             MentorshipCircle[] @relation("CircleCreator")
+  shoutoutsSubmitted         Shoutout[]               @relation("SubmittedBy")
+  shoutoutsRelatedTo         Shoutout[]               @relation("RelatedUser")
+  createdCircles             MentorshipCircle[]       @relation("CircleCreator")
   circleMemberships          MentorshipCircleMember[]
-  hostedAMASessions          AMASession[]       @relation("HostedAMASessions")
-  submittedAMAQuestions      AMAQuestion[]      @relation("SubmittedAMAQuestions")
-  answeredAMAQuestions       AMAQuestion[]      @relation("AnsweredAMAQuestions")
+  hostedAMASessions          AMASession[]             @relation("HostedAMASessions")
+  submittedAMAQuestions      AMAQuestion[]            @relation("SubmittedAMAQuestions")
+  answeredAMAQuestions       AMAQuestion[]            @relation("AnsweredAMAQuestions")
+
+  // ++ NEW: Skills Relation ++
+  userSkills UserSkill[] // Many-to-many link to skills
 
   // ++ Q&A Feature Relations ++
-  questions         Question[] @relation("QuestionAuthor")
-  answers           Answer[]   @relation("AnswerAuthor")
-  votes             Vote[]     @relation("Voter")
-  // ++ End Q&A Relations ++
+  questions Question[] @relation("QuestionAuthor")
+  answers   Answer[]   @relation("AnswerAuthor")
+  votes     Vote[]     @relation("Voter")
+
+  // ++ SUGGESTED: Notifications Relation ++
+  notifications Notification[] @relation("RecipientUser")
+
+  @@index([positionId]) // Index the new foreign key
+  @@index([points]) // Index points for leaderboard
 }
 
 model VerificationToken {
@@ -140,15 +188,57 @@ model VerificationToken {
 
 // --- Application Models ---
 
+// ++ NEW: User's Job Position ++
+model Position {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Software Engineer", "HR Manager", "CEO", "QA Tester"
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  users       User[] // Users holding this position
+
+  @@index([name])
+}
+
+// ++ NEW: Skills ++
+model Skill {
+  id          String      @id @default(cuid())
+  name        String      @unique // e.g., "React", "Python", "Project Management"
+  description String?     @db.Text
+  category    String? // ++ Optional Category (e.g., "Frontend", "Backend", "Soft Skill") ++
+  createdAt   DateTime    @default(now())
+  userSkills  UserSkill[] // Link to users possessing this skill
+
+  @@index([name])
+  @@index([category]) // Index category if added
+}
+
+// ++ NEW: User-Skill Join Table (Many-to-Many) ++
+model UserSkill {
+  userId  String
+  skillId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  assignedAt  DateTime @default(now())
+  // ++ Optional Proficiency/Interest ++
+  proficiency Int? // e.g., 1-5 scale, null if not specified
+  // isInterested Boolean @default(false) // Or maybe skill goal?
+
+  @@id([userId, skillId]) // Composite primary key
+  @@index([skillId])
+  @@index([userId])
+}
+
 model Kudos {
-  id         String     @id @default(cuid())
-  message    String     @db.Text
-  createdAt  DateTime   @default(now())
-  giverId    String
-  giver      User       @relation("KudosGiver", fields: [giverId], references: [id], onDelete: Cascade)
-  receiverId String
-  receiver   User       @relation("KudosReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  PointLog   PointLog[]
+  id            String         @id @default(cuid())
+  message       String         @db.Text
+  createdAt     DateTime       @default(now())
+  giverId       String
+  giver         User           @relation("KudosGiver", fields: [giverId], references: [id], onDelete: Cascade)
+  receiverId    String
+  receiver      User           @relation("KudosReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  pointLogs     PointLog[] // Renamed for clarity
+  notifications Notification[] // ++ SUGGESTED: Notifications Link ++
 
   @@index([createdAt])
   @@index([giverId])
@@ -156,30 +246,29 @@ model Kudos {
 }
 
 model PointLog {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   pointsAwarded Int
-  reason        String
-  timestamp     DateTime @default(now())
+  type          PointLogType? // ++ SUGGESTED: Use Type Enum ++
+  reason        String? // ++ SUGGESTED: Optional reason text ++
+  timestamp     DateTime      @default(now())
   userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Links to specific actions that generated points
-  kudosId String?
-  kudos   Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
-
-  // ++ Q&A Feature Point Link ++
+  kudosId          String?
+  kudos            Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
   acceptedAnswerId String? @unique // Ensure a PointLog entry is tied to only one accepted answer
   acceptedAnswer   Answer? @relation(fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
-  // ++ End Q&A Link ++
-
-  // Consider adding links to other point sources later
-  // badgeId String?
-  // mentorshipCircleParticipationId String?
+  badgeId          String? // ++ SUGGESTED: Link to earned badge ++
+  badge            Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+  // Add links to other sources: ideaId, resourceId, etc.
 
   @@index([userId])
   @@index([timestamp])
   @@index([kudosId])
   @@index([acceptedAnswerId])
+  @@index([badgeId])
+  @@index([type])
 }
 
 model LearningResource {
@@ -190,6 +279,8 @@ model LearningResource {
   submittedAt   DateTime @default(now())
   submittedById String
   submittedBy   User     @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+  // Add points relation if submitting grants points
+  // pointLog PointLog?
 
   @@index([submittedAt])
   @@index([submittedById])
@@ -202,19 +293,23 @@ model InnovationIdea {
   submittedAt   DateTime @default(now())
   submittedById String
   submittedBy   User     @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
+  // Add points relation if submitting grants points
+  // pointLog PointLog?
 
   @@index([submittedAt])
   @@index([submittedById])
 }
 
 model Badge {
-  id           String      @id @default(cuid())
-  name         String      @unique
-  description  String      @db.Text
-  iconName     String?
-  criteriaDesc String?     @db.Text
-  createdAt    DateTime    @default(now())
+  id           String         @id @default(cuid())
+  name         String         @unique
+  description  String         @db.Text
+  iconName     String? // e.g., "Star", "Heart", used by frontend to map to an icon component
+  criteriaDesc String?        @db.Text // Textual description of how to earn
+  createdAt    DateTime       @default(now())
   userBadges   UserBadge[]
+  pointLogs    PointLog[] // ++ SUGGESTED: Link for points awarded when badge earned ++
+  Notification Notification[]
 
   @@index([name])
 }
@@ -238,7 +333,7 @@ model Shoutout {
   message       String       @db.Text
   imageUrl      String?      @db.Text
   createdAt     DateTime     @default(now())
-  relatedUserId String?
+  relatedUserId String? // User mentioned in the shoutout (optional)
   relatedUser   User?        @relation("RelatedUser", fields: [relatedUserId], references: [id], onDelete: SetNull)
   submittedById String
   submittedBy   User         @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
@@ -250,28 +345,28 @@ model Shoutout {
 }
 
 model MentorshipSkill {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  circles     MentorshipCircle[]
+  id          String             @id @default(cuid())
+  name        String             @unique
+  description String?            @db.Text
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  circles     MentorshipCircle[] // Circles focused on this skill
 
   @@index([name])
 }
 
 model MentorshipCircle {
-  id          String                 @id @default(cuid())
+  id          String                   @id @default(cuid())
   title       String
-  description String?                @db.Text
-  status      MentorshipCircleStatus @default(FORMING)
+  description String?                  @db.Text
+  status      MentorshipCircleStatus   @default(FORMING)
   maxMentees  Int?
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  skillId     String
-  skill       MentorshipSkill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  creatorId   String
-  creator     User                   @relation("CircleCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  skillId     String // Skill the circle focuses on
+  skill       MentorshipSkill          @relation(fields: [skillId], references: [id], onDelete: Restrict) // Don't delete skill if circles exist
+  creatorId   String // User who proposed/created the circle
+  creator     User                     @relation("CircleCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   members     MentorshipCircleMember[]
 
   @@index([status])
@@ -281,33 +376,33 @@ model MentorshipCircle {
 
 model MentorshipCircleMember {
   id       String           @id @default(cuid())
-  role     MentorshipRole
-  status   MembershipStatus @default(ACTIVE)
+  role     MentorshipRole // Mentor or Mentee
+  status   MembershipStatus @default(ACTIVE) // Status within the circle
   joinedAt DateTime         @default(now())
   circleId String
   circle   MentorshipCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
   userId   String
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([circleId, userId])
+  @@unique([circleId, userId]) // User can only be in a circle once
   @@index([userId])
   @@index([circleId])
   @@index([status])
 }
 
 model AMASession {
-  id            String    @id @default(cuid())
-  title         String
-  description   String?   @db.Text
-  scheduledAt   DateTime
-  status        AMASessionStatus @default(UPCOMING)
-  isTechSpecific Boolean  @default(false)
-  topic         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  hostId        String
-  host          User      @relation("HostedAMASessions", fields: [hostId], references: [id], onDelete: Restrict) // Prevent deleting user if they hosted sessions
-  questions     AMAQuestion[]
+  id             String           @id @default(cuid())
+  title          String
+  description    String?          @db.Text
+  scheduledAt    DateTime
+  status         AMASessionStatus @default(UPCOMING)
+  isTechSpecific Boolean          @default(false)
+  topic          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  hostId         String
+  host           User             @relation("HostedAMASessions", fields: [hostId], references: [id], onDelete: Restrict) // Keep host user even if they leave?
+  questions      AMAQuestion[]
 
   @@index([status])
   @@index([scheduledAt])
@@ -315,23 +410,26 @@ model AMASession {
 }
 
 model AMAQuestion {
-  id            String    @id @default(cuid())
-  text          String    @db.Text
-  isAnonymous   Boolean   @default(false)
-  answerText    String?   @db.Text
+  id            String         @id @default(cuid())
+  text          String         @db.Text
+  isAnonymous   Boolean        @default(false)
+  isApproved    Boolean        @default(false) // ++ ADDED: Approval status ++
+  answerText    String?        @db.Text
   answeredAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   sessionId     String
-  session       AMASession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  submittedById String?
-  submittedBy   User?      @relation("SubmittedAMAQuestions", fields: [submittedById], references: [id], onDelete: SetNull) // Keep question if submitter deleted
-  answeredById  String?
-  answeredBy    User?      @relation("AnsweredAMAQuestions", fields: [answeredById], references: [id], onDelete: SetNull) // Keep answer if answerer deleted
+  session       AMASession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  submittedById String? // Nullable if anonymous or user deleted
+  submittedBy   User?          @relation("SubmittedAMAQuestions", fields: [submittedById], references: [id], onDelete: SetNull)
+  answeredById  String? // Nullable if not answered or answerer deleted
+  answeredBy    User?          @relation("AnsweredAMAQuestions", fields: [answeredById], references: [id], onDelete: SetNull)
+  notifications Notification[] // ++ SUGGESTED: Notifications Link ++
 
   @@index([sessionId])
   @@index([submittedById])
   @@index([answeredAt])
+  @@index([isApproved]) // Index approval status
 }
 
 // +++++++++++++++++++++++++++++++++++++++
@@ -341,99 +439,125 @@ model AMAQuestion {
 model Question {
   id        String   @id @default(cuid())
   title     String
-  content   Json // Changed from String @db.Text to Json for Plate.js output
+  content   Json // For Plate.js or similar rich text editor
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   authorId String
-  author   User   @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: Cascade) // Delete question if author is deleted
+  author   User   @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
 
-  answers          Answer[]
-  tags             QuestionTag[]
-  votes            Vote[]           @relation("QuestionVotes")
+  answers Answer[]
+  tags    QuestionTag[]
+  votes   Vote[]        @relation("QuestionVotes")
 
-  acceptedAnswerId String?          @unique // A question has zero or one accepted answer
-  acceptedAnswer   Answer?          @relation("AcceptedAnswerForQuestion", fields: [acceptedAnswerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  // Need onDelete: NoAction here to prevent cycles if the accepted answer tries to delete the question
+  acceptedAnswerId String?        @unique // One accepted answer per question
+  acceptedAnswer   Answer?        @relation("AcceptedAnswerForQuestion", fields: [acceptedAnswerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Add @@fulltext index if needed for searching title/content
+  Notification     Notification[]
 
   @@index([authorId])
   @@index([createdAt])
-  // Maybe add index for full-text search on title/content later depending on DB
 }
 
 model Answer {
-  id         String   @id @default(cuid())
-  content    Json // Changed from String @db.Text to Json for Plate.js output
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  content   Json // For Plate.js or similar rich text editor
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   authorId String
-  author   User   @relation("AnswerAuthor", fields: [authorId], references: [id], onDelete: Cascade) // Delete answer if author is deleted
+  author   User   @relation("AnswerAuthor", fields: [authorId], references: [id], onDelete: Cascade)
 
   questionId String
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade) // Delete answer if question is deleted
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  votes      Vote[]   @relation("AnswerVotes")
+  votes Vote[] @relation("AnswerVotes")
 
-  isAccepted     Boolean    @default(false) // Denormalized flag for easier querying
-  acceptedIn     Question?  @relation("AcceptedAnswerForQuestion") // Link back to the question where this answer is accepted
-  pointLogReward PointLog[] // Link to points awarded if this answer is accepted
+  isAccepted     Boolean        @default(false) // Denormalized flag
+  acceptedIn     Question?      @relation("AcceptedAnswerForQuestion") // Link back to the question
+  pointLogReward PointLog[] // Link to points awarded
+  notifications  Notification[] // ++ SUGGESTED: Notifications Link ++
 
   @@index([authorId])
   @@index([questionId])
   @@index([createdAt])
-  @@index([isAccepted]) // Index potentially useful for finding accepted answers
+  @@index([isAccepted])
 }
+
 model Tag {
   id        String        @id @default(cuid())
-  name      String        @unique // Tag names should be unique
+  name      String        @unique // Tag names (lowercase recommended)
   createdAt DateTime      @default(now())
-  questions QuestionTag[] // How many questions use this tag
+  questions QuestionTag[]
 
-  // Optional: Add description, createdBy etc. if needed
+  // Optional: Add description
   // description String?
 
   @@index([name])
 }
 
-// Join table for Many-to-Many relationship between Question and Tag
+// Q&A Join table for Question <-> Tag
 model QuestionTag {
   questionId String
   tagId      String
 
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade) // Remove link if question deleted
-  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)      // Remove link if tag deleted
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   assignedAt DateTime @default(now())
-  // assignedById String? // Optional: track who added the tag
-  // assignedBy User? @relation("TagAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
 
-  @@id([questionId, tagId]) // Composite primary key ensures unique question-tag pair
-  @@index([tagId]) // Index for finding questions by tag
+  @@id([questionId, tagId])
+  @@index([tagId])
 }
 
 model Vote {
   id        String   @id @default(cuid())
-  voteType  VoteType
+  voteType  VoteType // Currently just UPVOTE
   createdAt DateTime @default(now())
 
   userId String
-  user   User   @relation("Voter", fields: [userId], references: [id], onDelete: Cascade) // Delete vote if user deleted
+  user   User   @relation("Voter", fields: [userId], references: [id], onDelete: Cascade)
 
-  // A vote belongs to EITHER a Question OR an Answer
+  // Vote is for EITHER Question OR Answer
   questionId String?
-  question   Question? @relation("QuestionVotes", fields: [questionId], references: [id], onDelete: Cascade) // Delete vote if question deleted
+  question   Question? @relation("QuestionVotes", fields: [questionId], references: [id], onDelete: Cascade)
 
   answerId String?
-  answer   Answer?   @relation("AnswerVotes", fields: [answerId], references: [id], onDelete: Cascade) // Delete vote if answer deleted
+  answer   Answer? @relation("AnswerVotes", fields: [answerId], references: [id], onDelete: Cascade)
 
-  // Ensure a user can vote only once per question OR per answer
+  // Check constraint (can be handled in application logic too)
+  // Ensure either questionId or answerId is non-null, but not both.
+
+  // Ensure unique vote per user per item
   @@unique([userId, questionId])
   @@unique([userId, answerId])
-
-  // Add constraints later if needed to ensure questionId OR answerId is set, but not both
-
   @@index([userId])
   @@index([questionId])
   @@index([answerId])
+}
+
+// ++ SUGGESTED: Notification Model ++
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String // The user receiving the notification
+  user      User             @relation("RecipientUser", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType // Use the specific enum
+  message   String           @db.Text // The notification text
+  isRead    Boolean          @default(false) // Read status
+  url       String? // Optional URL to link to (e.g., /app/kudos, /app/qna/questions/...)
+  createdAt DateTime         @default(now())
+
+  // Optional: Link to the source entity that triggered the notification
+  kudosId       String?
+  kudos         Kudos?       @relation(fields: [kudosId], references: [id], onDelete: Cascade) // If kudos deleted, notification deleted too? Or SetNull?
+  answerId      String?
+  answer        Answer?      @relation(fields: [answerId], references: [id], onDelete: Cascade) // Delete notification if answer deleted?
+  questionId    String? // Could link to question for new answer notification etc.
+  question      Question?    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  amaQuestionId String? // Link to an answered AMA question
+  amaQuestion   AMAQuestion? @relation(fields: [amaQuestionId], references: [id], onDelete: Cascade)
+  badgeId       String?
+  badge         Badge?       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)]) // Common query pattern
 }
