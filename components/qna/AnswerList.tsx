@@ -48,7 +48,7 @@ const AnswerItem: React.FC<{
   });
 
   const isAccepted = answer.isAccepted;
-  // const canAccept = currentUserId === questionAuthorId && !isAccepted && !answers.some(a => a.isAccepted); // Use full answers list from props if needed
+  // const canAccept = currentUserId === questionAuthorId && !isAccepted && !answer.some(a => a.isAccepted); // Use full answers list from props if needed
 
   // --- Voting Hook ---
   const { mutate: voteAnswer, isPending: isVoting } = useVoteMutation(

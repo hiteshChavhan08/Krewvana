@@ -1,7 +1,7 @@
 // services/qnaService.ts
 
 import { prisma } from "@/lib/prisma";
-import { Prisma, UserRole, VoteType } from "@prisma/client"; // Import relevant Prisma types/enums
+import { PointLogType, Prisma, UserRole, VoteType } from "@prisma/client"; // Import relevant Prisma types/enums
 import { z } from "zod";
 import {
   ApiError,
@@ -10,6 +10,14 @@ import {
   NotFoundError, // Import custom errors
 } from "@/lib/api/responses";
 import { Value } from "@udecode/plate";
+import {
+  POINTS_ANSWER_ACCEPTED_AUTHOR,
+  POINTS_ANSWER_ACCEPTED_SELECTOR,
+  POINTS_ANSWER_POSTED,
+  POINTS_ANSWER_UPVOTE_RECEIVED,
+  POINTS_QUESTION_UPVOTE_RECEIVED,
+  POINTS_UPVOTE_GIVEN,
+} from "@/lib/constants";
 
 // Define or import AuthenticatedUser type
 interface AuthenticatedUser {
@@ -18,6 +26,15 @@ interface AuthenticatedUser {
   // other fields...
 }
 
+interface VoteInput {
+  userId: string;
+  voteType: VoteType; // Currently only UPVOTE
+}
+
+interface VoteResult {
+  newVoteCount: number;
+  userVote: VoteType | null; // What the user's vote is now (UPVOTE or null if removed)
+}
 // --- Zod Schemas ---
 export const CreateQuestionInputSchema = z
   .object({
@@ -344,39 +361,392 @@ export const deleteQuestion = async (
 /**
  * Creates a new answer for a specific question.
  */
+// export const createAnswerForQuestion = async (
+//   questionId: string,
+//   content: Value, // Receive Plate Value type
+//   authorId: string
+// ) => {
+//   // 1. Verify Question Exists (already done in API route, but can double-check)
+//   const questionExists = await prisma.question.findUnique({
+//     where: { id: questionId },
+//     select: { id: true },
+//   });
+//   if (!questionExists) throw new NotFoundError("Question");
+
+//   // 2. Create Answer
+//   const newAnswer = await prisma.answer.create({
+//     data: {
+//       content: content as any, // Cast content (Prisma expects JsonValue)
+//       questionId: questionId,
+//       authorId: authorId,
+//     },
+//     select: {
+//       // Select fields needed for API response
+//       id: true,
+//       content: true,
+//       createdAt: true,
+//       authorId: true,
+//       questionId: true,
+//       // author: { select: { id: true, name: true, image: true } }
+//     },
+//   });
+
+//   // 3. TODO: Award points / Trigger notifications
+//   // await awardPointsForAnswer(authorId, newAnswer.id);
+//   // await notifyQuestionAuthor(questionId, newAnswer.id, authorId);
+
+//   return newAnswer;
+// };
+
+/**
+ * Handles voting on a Question. Creates/deletes votes and updates points.
+ */
+export const voteQuestion = async (
+  questionId: string,
+  voteInput: VoteInput // { userId, voteType }
+): Promise<VoteResult> => {
+  const { userId, voteType } = voteInput;
+
+  // Use transaction for atomicity
+  return prisma.$transaction(async (tx) => {
+    const question = await tx.question.findUnique({
+      where: { id: questionId },
+      select: { id: true, authorId: true },
+    });
+    if (!question) throw new NotFoundError("Question");
+
+    // Prevent self-voting
+    if (question.authorId === userId) {
+      throw new BadRequestError("You cannot vote on your own question.");
+    }
+
+    const existingVote = await tx.vote.findUnique({
+      where: { userId_questionId: { userId, questionId } },
+    });
+
+    let userVoteStatus: VoteType | null = null;
+    let createdVote: { id: string } | null = null; // Store created vote for point log
+
+    if (existingVote) {
+      // Remove existing vote (un-upvote)
+      await tx.vote.delete({ where: { id: existingVote.id } });
+      userVoteStatus = null;
+      // Deduct points (careful logic needed if points were awarded previously)
+      // Example: Deduct points from author and voter if rules dictate
+      await tx.user.update({
+        where: { id: question.authorId },
+        data: { points: { decrement: POINTS_QUESTION_UPVOTE_RECEIVED } },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { points: { decrement: POINTS_UPVOTE_GIVEN } },
+      });
+      // Maybe delete related PointLog entries? Or mark them as reversed? Complex.
+      // Simpler: Only award points on initial upvote, don't deduct on removal.
+    } else {
+      // Create new vote
+      createdVote = await tx.vote.create({
+        data: { userId, questionId, voteType: VoteType.UPVOTE },
+        select: { id: true }, // Get ID for logging
+      });
+      userVoteStatus = VoteType.UPVOTE;
+
+      // Award points to question author
+      await tx.user.update({
+        where: { id: question.authorId },
+        data: { points: { increment: POINTS_QUESTION_UPVOTE_RECEIVED } },
+      });
+      // Award points to voter
+      await tx.user.update({
+        where: { id: userId },
+        data: { points: { increment: POINTS_UPVOTE_GIVEN } },
+      });
+
+      // Log points for voter (link to the new vote)
+      await tx.pointLog.create({
+        data: {
+          userId: userId,
+          pointsAwarded: POINTS_UPVOTE_GIVEN,
+          type: PointLogType.UPVOTE_GIVEN,
+          reason: `Upvoted question ${questionId}`,
+          relatedVoteId: createdVote.id, // Link to the vote record
+        },
+      });
+      // Log points for question author (link to the new vote maybe?)
+      await tx.pointLog.create({
+        data: {
+          userId: question.authorId,
+          pointsAwarded: POINTS_QUESTION_UPVOTE_RECEIVED,
+          type: PointLogType.QUESTION_UPVOTE_RECEIVED,
+          reason: `Received upvote on question ${questionId}`,
+          relatedVoteId: createdVote.id,
+        },
+      });
+    }
+
+    const newVoteCount = await tx.vote.count({
+      where: { questionId: questionId, voteType: VoteType.UPVOTE },
+    });
+    return { newVoteCount, userVote: userVoteStatus };
+  });
+};
+
+/**
+ * Handles voting on an Answer. Creates/deletes votes and updates points.
+ */
+
+export const voteAnswer = async (
+  answerId: string,
+  voteInput: VoteInput
+): Promise<VoteResult> => {
+  const { userId, voteType } = voteInput;
+
+  return prisma.$transaction(async (tx) => {
+    const answer = await tx.answer.findUnique({
+      where: { id: answerId },
+      select: { id: true, authorId: true },
+    });
+    if (!answer) throw new NotFoundError("Answer");
+
+    // Prevent self-voting
+    if (answer.authorId === userId) {
+      throw new BadRequestError("You cannot vote on your own answer.");
+    }
+
+    const existingVote = await tx.vote.findUnique({
+      where: { userId_answerId: { userId, answerId } },
+    });
+
+    let userVoteStatus: VoteType | null = null;
+    let createdVote: { id: string } | null = null;
+
+    if (existingVote) {
+      // Remove vote
+      await tx.vote.delete({ where: { id: existingVote.id } });
+      userVoteStatus = null;
+      // TODO: Point deduction logic if needed (similar to question vote)
+      await tx.user.update({
+        where: { id: answer.authorId },
+        data: { points: { decrement: POINTS_ANSWER_UPVOTE_RECEIVED } },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { points: { decrement: POINTS_UPVOTE_GIVEN } },
+      });
+    } else {
+      // Create vote
+      createdVote = await tx.vote.create({
+        data: { userId, answerId, voteType: VoteType.UPVOTE },
+        select: { id: true },
+      });
+      userVoteStatus = VoteType.UPVOTE;
+
+      // Award points to answer author
+      await tx.user.update({
+        where: { id: answer.authorId },
+        data: { points: { increment: POINTS_ANSWER_UPVOTE_RECEIVED } },
+      });
+      // Award points to voter
+      await tx.user.update({
+        where: { id: userId },
+        data: { points: { increment: POINTS_UPVOTE_GIVEN } },
+      });
+
+      // Log points for voter
+      await tx.pointLog.create({
+        data: {
+          userId: userId,
+          pointsAwarded: POINTS_UPVOTE_GIVEN,
+          type: PointLogType.UPVOTE_GIVEN,
+          reason: `Upvoted answer ${answerId}`,
+          relatedVoteId: createdVote.id,
+        },
+      });
+      // Log points for answer author
+      await tx.pointLog.create({
+        data: {
+          userId: answer.authorId,
+          pointsAwarded: POINTS_ANSWER_UPVOTE_RECEIVED,
+          type: PointLogType.ANSWER_UPVOTE_RECEIVED,
+          reason: `Received upvote on answer ${answerId}`,
+          relatedVoteId: createdVote.id,
+        },
+      });
+    }
+
+    const newVoteCount = await tx.vote.count({
+      where: { answerId: answerId, voteType: VoteType.UPVOTE },
+    });
+    return { newVoteCount, userVote: userVoteStatus };
+  });
+};
 export const createAnswerForQuestion = async (
   questionId: string,
-  content: Value, // Receive Plate Value type
+  content: Value,
   authorId: string
 ) => {
-  // 1. Verify Question Exists (already done in API route, but can double-check)
-  const questionExists = await prisma.question.findUnique({
-    where: { id: questionId },
-    select: { id: true },
+  // Use transaction to create answer, award points, and log points atomically
+  return prisma.$transaction(async (tx) => {
+    // 1. Verify Question Exists
+    const questionExists = await tx.question.findUnique({
+      where: { id: questionId },
+      select: { id: true },
+    });
+    if (!questionExists) throw new NotFoundError("Question");
+
+    // 2. Create Answer
+    const newAnswer = await tx.answer.create({
+      data: {
+        content: content as any,
+        questionId: questionId,
+        authorId: authorId,
+      },
+      select: {
+        // Select fields needed for API response and point log
+        id: true,
+        content: true,
+        createdAt: true,
+        authorId: true,
+        questionId: true,
+      },
+    });
+
+    // 3. Award Points to Answer Author
+    await tx.user.update({
+      where: { id: authorId },
+      data: { points: { increment: POINTS_ANSWER_POSTED } },
+    });
+
+    // 4. Log the Points
+    await tx.pointLog.create({
+      data: {
+        userId: authorId,
+        pointsAwarded: POINTS_ANSWER_POSTED,
+        type: PointLogType.ANSWER_POSTED,
+        reason: `Posted an answer to question ${questionId}`, // Optional detail
+        postedAnswerId: newAnswer.id, // Link log to the answer
+      },
+    });
+
+    return newAnswer; // Return the created answer
   });
-  if (!questionExists) throw new NotFoundError("Question");
+};
 
-  // 2. Create Answer
-  const newAnswer = await prisma.answer.create({
-    data: {
-      content: content as any, // Cast content (Prisma expects JsonValue)
-      questionId: questionId,
-      authorId: authorId,
-    },
-    select: {
-      // Select fields needed for API response
-      id: true,
-      content: true,
-      createdAt: true,
-      authorId: true,
-      questionId: true,
-      // author: { select: { id: true, name: true, image: true } }
-    },
+export const acceptAnswer = async (
+  questionId: string,
+  answerId: string,
+  questionAuthorId: string // ID of user performing the action
+): Promise<{
+  updatedQuestion: { acceptedAnswerId: string | null };
+  updatedAnswer: { id: string; isAccepted: boolean };
+}> => {
+  // Use transaction for atomicity
+  return prisma.$transaction(async (tx) => {
+    // 1. Verify the question exists and the user is the author
+    const question = await tx.question.findUnique({
+      where: { id: questionId },
+      select: { authorId: true, acceptedAnswerId: true },
+    });
+    if (!question) throw new NotFoundError("Question");
+    if (question.authorId !== questionAuthorId)
+      throw new ForbiddenError(
+        "Only the question author can accept an answer."
+      );
+
+    // 2. Verify the answer exists and belongs to this question
+    const answer = await tx.answer.findUnique({
+      where: { id: answerId },
+      select: { id: true, questionId: true, authorId: true },
+    });
+    if (!answer || answer.questionId !== questionId)
+      throw new NotFoundError("Answer");
+
+    // 3. Check if an answer is already accepted OR if un-accepting
+    const currentlyAcceptedId = question.acceptedAnswerId;
+    const isUnaccepting = currentlyAcceptedId === answerId;
+    const isAcceptingNew = !currentlyAcceptedId && !isUnaccepting;
+    const isChangingAccepted = currentlyAcceptedId && !isUnaccepting;
+
+    if (isUnaccepting) {
+      // --- Un-accepting the answer ---
+      const [updatedQ, updatedA] = await Promise.all([
+        tx.question.update({
+          where: { id: questionId },
+          data: { acceptedAnswerId: null },
+        }),
+        tx.answer.update({
+          where: { id: answerId },
+          data: { isAccepted: false },
+        }),
+      ]);
+      // TODO: Point deduction logic (complex - need to find original point logs)
+      // For simplicity, often points are not deducted when un-accepted.
+      console.log(
+        `[acceptAnswer] Answer ${answerId} un-accepted for question ${questionId}`
+      );
+      return { updatedQuestion: updatedQ, updatedAnswer: updatedA };
+    } else if (isAcceptingNew || isChangingAccepted) {
+      // --- Accepting this answer ---
+      // If changing, first un-accept the old one
+      if (isChangingAccepted && currentlyAcceptedId) {
+        await tx.answer.update({
+          where: { id: currentlyAcceptedId },
+          data: { isAccepted: false },
+        });
+        // TODO: Point deduction for previously accepted answer author?
+      }
+
+      // Accept the new answer and link it to the question
+      const [updatedQ, updatedA] = await Promise.all([
+        tx.question.update({
+          where: { id: questionId },
+          data: { acceptedAnswerId: answerId },
+        }),
+        tx.answer.update({
+          where: { id: answerId },
+          data: { isAccepted: true },
+        }),
+      ]);
+
+      // Award points to answer author
+      await tx.user.update({
+        where: { id: answer.authorId },
+        data: { points: { increment: POINTS_ANSWER_ACCEPTED_AUTHOR } },
+      });
+      // Award points to question author (selector)
+      await tx.user.update({
+        where: { id: questionAuthorId },
+        data: { points: { increment: POINTS_ANSWER_ACCEPTED_SELECTOR } },
+      });
+
+      // Log points for answer author
+      await tx.pointLog.create({
+        data: {
+          userId: answer.authorId,
+          pointsAwarded: POINTS_ANSWER_ACCEPTED_AUTHOR,
+          type: PointLogType.ANSWER_ACCEPTED_AUTHOR,
+          reason: `Answer ${answerId} accepted for question ${questionId}`,
+          acceptedAnswerId: answerId, // Link log to the accepted answer
+        },
+      });
+      // Log points for question author
+      await tx.pointLog.create({
+        data: {
+          userId: questionAuthorId,
+          pointsAwarded: POINTS_ANSWER_ACCEPTED_SELECTOR,
+          type: PointLogType.ANSWER_ACCEPTED_SELECTOR,
+          reason: `Accepted answer ${answerId} for question ${questionId}`,
+          acceptedAnswerId: answerId,
+        },
+      });
+
+      console.log(
+        `[acceptAnswer] Answer ${answerId} accepted for question ${questionId}`
+      );
+      return { updatedQuestion: updatedQ, updatedAnswer: updatedA };
+    } else {
+      // Should not happen if logic is correct
+      throw new Error("Invalid state for accepting answer.");
+    }
   });
-
-  // 3. TODO: Award points / Trigger notifications
-  // await awardPointsForAnswer(authorId, newAnswer.id);
-  // await notifyQuestionAuthor(questionId, newAnswer.id, authorId);
-
-  return newAnswer;
 };

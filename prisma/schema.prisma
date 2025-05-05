@@ -64,17 +64,53 @@ enum VoteType {
 enum PointLogType {
   KUDOS_GIVEN
   KUDOS_RECEIVED
-  ANSWER_ACCEPTED_AUTHOR // Points for the answer author
-  ANSWER_ACCEPTED_SELECTOR // Points for the question author who accepted (if any)
-  QUESTION_UPVOTE // If voting gives points
-  ANSWER_UPVOTE // If voting gives points
+  ANSWER_POSTED // ++ ADDED ++
+  ANSWER_ACCEPTED_AUTHOR
+  ANSWER_ACCEPTED_SELECTOR
+  QUESTION_UPVOTE_RECEIVED // ++ ADDED ++
+  ANSWER_UPVOTE_RECEIVED // ++ ADDED ++
+  UPVOTE_GIVEN // ++ ADDED ++
   PROFILE_COMPLETION
   MENTORSHIP_COMPLETED_MENTOR
   MENTORSHIP_COMPLETED_MENTEE
   BADGE_EARNED
   IDEA_SUBMITTED
   RESOURCE_SUBMITTED
-  OTHER // Generic catch-all
+  OTHER
+}
+
+model PointLog {
+  id            String        @id @default(cuid())
+  pointsAwarded Int
+  type          PointLogType?
+  reason        String?
+  timestamp     DateTime      @default(now())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Links to specific actions
+  kudosId          String?
+  kudos            Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
+  acceptedAnswerId String? @unique // This is okay, only ONE log for accepting an answer
+  acceptedAnswer   Answer? @relation(fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
+  badgeId          String?
+  badge            Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+  postedAnswerId   String? @unique // This is okay, only ONE log for posting an answer
+  postedAnswer     Answer? @relation("PointsForPostingAnswer", fields: [postedAnswerId], references: [id], onDelete: SetNull)
+
+  relatedVoteId String? // Foreign key to the Vote - NO @unique here
+  relatedVote   Vote?   @relation("PointsForVote", fields: [relatedVoteId], references: [id], onDelete: SetNull) // Allow vote deletion without deleting log
+  Vote          Vote[]
+
+  // ... (Indexes: userId, timestamp, type, postedAnswerId, relatedVoteId etc.) ...
+  @@index([userId])
+  @@index([timestamp])
+  @@index([type])
+  @@index([postedAnswerId])
+  @@index([relatedVoteId]) // Index the foreign key
+  @@index([acceptedAnswerId])
+  @@index([badgeId])
+  @@index([kudosId])
 }
 
 // ++ SUGGESTED: Enum for Notification types ++
@@ -140,9 +176,9 @@ model User {
   askMeAbout   String?
 
   // ++ NEW: Job Position ++
-  positionId String? // Foreign key for the user's primary position
+  positionId         String? // Foreign key for the user's primary position
   isPositionVerified Boolean   @default(false)
-  position   Position? @relation(fields: [positionId], references: [id], onDelete: SetNull) // Allow user to exist without a position
+  position           Position? @relation(fields: [positionId], references: [id], onDelete: SetNull) // Allow user to exist without a position
 
   // Relations to Auth
   accounts Account[]
@@ -245,31 +281,31 @@ model Kudos {
   @@index([receiverId])
 }
 
-model PointLog {
-  id            String        @id @default(cuid())
-  pointsAwarded Int
-  type          PointLogType? // ++ SUGGESTED: Use Type Enum ++
-  reason        String? // ++ SUGGESTED: Optional reason text ++
-  timestamp     DateTime      @default(now())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+// model PointLog {
+//   id            String        @id @default(cuid())
+//   pointsAwarded Int
+//   type          PointLogType? // ++ SUGGESTED: Use Type Enum ++
+//   reason        String? // ++ SUGGESTED: Optional reason text ++
+//   timestamp     DateTime      @default(now())
+//   userId        String
+//   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Links to specific actions that generated points
-  kudosId          String?
-  kudos            Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
-  acceptedAnswerId String? @unique // Ensure a PointLog entry is tied to only one accepted answer
-  acceptedAnswer   Answer? @relation(fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
-  badgeId          String? // ++ SUGGESTED: Link to earned badge ++
-  badge            Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
-  // Add links to other sources: ideaId, resourceId, etc.
+//   // Links to specific actions that generated points
+//   kudosId          String?
+//   kudos            Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
+//   acceptedAnswerId String? @unique // Ensure a PointLog entry is tied to only one accepted answer
+//   acceptedAnswer   Answer? @relation(fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
+//   badgeId          String? // ++ SUGGESTED: Link to earned badge ++
+//   badge            Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+//   // Add links to other sources: ideaId, resourceId, etc.
 
-  @@index([userId])
-  @@index([timestamp])
-  @@index([kudosId])
-  @@index([acceptedAnswerId])
-  @@index([badgeId])
-  @@index([type])
-}
+//   @@index([userId])
+//   @@index([timestamp])
+//   @@index([kudosId])
+//   @@index([acceptedAnswerId])
+//   @@index([badgeId])
+//   @@index([type])
+// }
 
 model LearningResource {
   id            String   @id @default(cuid())
@@ -473,10 +509,11 @@ model Answer {
 
   votes Vote[] @relation("AnswerVotes")
 
-  isAccepted     Boolean        @default(false) // Denormalized flag
-  acceptedIn     Question?      @relation("AcceptedAnswerForQuestion") // Link back to the question
-  pointLogReward PointLog[] // Link to points awarded
-  notifications  Notification[] // ++ SUGGESTED: Notifications Link ++
+  isAccepted       Boolean        @default(false) // Denormalized flag
+  acceptedIn       Question?      @relation("AcceptedAnswerForQuestion") // Link back to the question
+  pointsForPosting PointLog?      @relation("PointsForPostingAnswer")
+  pointLogReward   PointLog[] // Link to points awarded
+  notifications    Notification[] // ++ SUGGESTED: Notifications Link ++
 
   @@index([authorId])
   @@index([questionId])
@@ -512,23 +549,23 @@ model QuestionTag {
 
 model Vote {
   id        String   @id @default(cuid())
-  voteType  VoteType // Currently just UPVOTE
+  voteType  VoteType
   createdAt DateTime @default(now())
 
   userId String
   user   User   @relation("Voter", fields: [userId], references: [id], onDelete: Cascade)
 
-  // Vote is for EITHER Question OR Answer
   questionId String?
   question   Question? @relation("QuestionVotes", fields: [questionId], references: [id], onDelete: Cascade)
 
   answerId String?
   answer   Answer? @relation("AnswerVotes", fields: [answerId], references: [id], onDelete: Cascade)
 
-  // Check constraint (can be handled in application logic too)
-  // Ensure either questionId or answerId is non-null, but not both.
+  // 👇 FIX: Change this to a list to represent one-to-many
+  pointsAwarded PointLog[] @relation("PointsForVote")
+  PointLog      PointLog?  @relation(fields: [pointLogId], references: [id])
+  pointLogId    String?
 
-  // Ensure unique vote per user per item
   @@unique([userId, questionId])
   @@unique([userId, answerId])
   @@index([userId])

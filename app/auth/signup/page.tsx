@@ -89,7 +89,7 @@ export default function SignupPage() {
                 id: toastId
             });
             reset(); // Clear the form
-            router.push('auth/signin'); // Redirect to login page
+            router.push('/auth/signin'); // Redirect to login page
 
         } catch (error: any) {
             console.error("Signup failed:", error);

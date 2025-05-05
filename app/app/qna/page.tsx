@@ -166,7 +166,7 @@ export default function QuestionsPage() {
   );
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-0">
+    <div className="container mx-auto py-8 px-4 md:px-4">
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-3xl font-bold">{pageTitle}</h1>
         <Button asChild>

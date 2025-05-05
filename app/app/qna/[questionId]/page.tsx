@@ -141,7 +141,7 @@ export default function QuestionPage() {
               questionId={questionId}
               answers={questionData.answers || []}
               questionAuthorId={questionData.author.id}
-              //  currentUserId={currentUserId}
+              currentUserId={currentUserId}
             />
 
             {/* Answer Form Component (only if user is logged in) */}
