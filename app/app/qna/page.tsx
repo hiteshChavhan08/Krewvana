@@ -170,7 +170,7 @@ export default function QuestionsPage() {
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-3xl font-bold">{pageTitle}</h1>
         <Button asChild>
-          <Link href="/ask">Ask Question</Link>
+          <Link href="/app/qna/ask">Ask Question</Link>
         </Button>
       </div>
 
@@ -208,7 +208,7 @@ export default function QuestionsPage() {
           </p>
           {!currentTag && (
             <Button asChild variant="link" className="mt-2">
-              <Link href="/ask">Be the first to ask!</Link>
+              <Link href="/app/qna/ask">Be the first to ask!</Link>
             </Button>
           )}
         </div>

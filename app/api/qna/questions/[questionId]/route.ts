@@ -31,7 +31,7 @@ export async function GET(
     const user = await getCurrentUser();
 
     // 2. Parameter Validation
-    const { questionId } = params;
+    const { questionId } = await params;
     if (!questionId) {
       throw new BadRequestError("Question ID parameter is required.");
     }

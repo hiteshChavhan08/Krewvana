@@ -12,18 +12,24 @@ import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
 
 // Import the components we will create next
-import { QuestionDetail, QuestionDetailSkeleton } from '@/components/qna/QuestionDetail';
-import { AnswerList, AnswerListSkeleton } from '@/components/qna/AnswerList';
-import { AnswerForm } from '@/components/qna/AnswerForm';
+// import { QuestionDetail, QuestionDetailSkeleton } from '@/components/qna/';
+// import { AnswerList, AnswerListSkeleton } from '@/components/qna/';
+import { AnswerForm } from '@/components/qna/answer-form';
+import { DetailedQuestion } from '@/lib/qna';
+import { AnswerList } from '@/components/qna/AnswerList';
+import { AnswerListSkeleton } from '@/components/qna/AnswerListSkeleton';
+import { QuestionDetail } from '@/components/qna/QuestionDetail';
+import { QuestionDetailSkeleton } from '@/components/qna/QuestionDetailSkeleton';
 
 // Import the type for the detailed question data from the API response
 // You might want to define this in a shared types file later
-import type { DetailedQuestion } from '@/types/qna'; // Assuming you create this type
+// import type { DetailedQuestion } from '@/types/qna'; // Assuming you create this type
 
 // --- Main Page Component ---
 export default function QuestionPage() {
   const params = useParams(); // Get route parameters { questionId: '...' }
   const questionId = params.questionId as string;
+  console.log("--- QuestionPage trying to fetch ID:", questionId); 
   const { data: session, status: sessionStatus } = useSession(); // Get user session
   
 
@@ -37,7 +43,7 @@ export default function QuestionPage() {
 
     setIsLoading(true);
     setError(null);
-    const apiUrl = `/api/questions/${questionId}`;
+    const apiUrl = `/api/qna/questions/${questionId}`;
 
     try {
       const response = await fetch(apiUrl);
@@ -81,7 +87,7 @@ export default function QuestionPage() {
   return (
     <div className="container mx-auto py-8 px-4 md:px-0">
        <Button variant="outline" size="sm" className="mb-6" asChild>
-          <Link href="/questions">
+          <Link href="/app/qna">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Questions
           </Link>

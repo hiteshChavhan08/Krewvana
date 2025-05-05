@@ -9,24 +9,16 @@ export function AdminPageClient() {
   return (
     <Tabs defaultValue="position-verification" className="w-full">
       {/* Use flex-wrap for smaller screens if many tabs are added */}
-      <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:max-w-[600px] gap-2">
+      <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2">
         <TabsTrigger value="position-verification">
           Position Verification
         </TabsTrigger>
         <TabsTrigger value="position-management">
           Position Management
-        </TabsTrigger>{" "}
-        {/* <-- Add Trigger */}
-        {/* Add more admin sections as TabsTrigger here */}
-        <TabsTrigger value="user-management" disabled>
-          User Management
         </TabsTrigger>
-        <TabsTrigger value="content-moderation" disabled>
-          Content Moderation
-        </TabsTrigger>
-        <TabsTrigger value="badge-management" disabled>
-          Badge Management
-        </TabsTrigger>
+        <TabsTrigger value="user-management">User Management</TabsTrigger>
+        <TabsTrigger value="content-moderation">Content Moderation</TabsTrigger>
+        <TabsTrigger value="badge-management">Badge Management</TabsTrigger>
       </TabsList>
 
       {/* Content for Position Verification Tab */}
@@ -45,18 +37,15 @@ export function AdminPageClient() {
       </TabsContent>
       {/* --- End Position Management Content --- */}
       {/* Placeholder Content for Other Tabs */}
+      {/* --- Badge Management Content --- */}
+
+      {/* --- End Badge Management Content --- */}
+
+      {/* --- User Management Content --- */}
       <TabsContent value="user-management" className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>User Management</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground italic">
-              User management features coming soon.
-            </p>
-          </CardContent>
-        </Card>
+        <UserManagement />
       </TabsContent>
+      {/* --- End User Management Content --- */}
       <TabsContent value="content-moderation" className="mt-6">
         <Card>
           <CardHeader>
@@ -70,16 +59,7 @@ export function AdminPageClient() {
         </Card>
       </TabsContent>
       <TabsContent value="badge-management" className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Badge Management</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground italic">
-              Badge management features coming soon.
-            </p>
-          </CardContent>
-        </Card>
+        <BadgeManagement />
       </TabsContent>
     </Tabs>
   );
@@ -88,3 +68,5 @@ export function AdminPageClient() {
 // Temporary Card component used in placeholders above
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PositionManagement } from "./PositionManagement";
+import { BadgeManagement } from "./BadgeManagement";
+import { UserManagement } from "./UserManagement";

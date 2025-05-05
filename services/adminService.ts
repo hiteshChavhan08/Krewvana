@@ -1,6 +1,6 @@
 // services/adminService.ts
 import { prisma } from "@/lib/prisma";
-import { Position, UserRole, type User } from "@prisma/client";
+import { Badge, Position, Prisma, UserRole, type User } from "@prisma/client";
 import {
   ApiError,
   BadRequestError,
@@ -34,10 +34,40 @@ export const CreatePositionSchema = z
   })
   .strict();
 
+export const CreateBadgeSchema = z
+  .object({
+    name: z.string().min(3, "Badge name too short").max(100).trim(),
+    description: z.string().min(10, "Description too short").max(1000).trim(),
+    iconName: z.string().max(50).optional().nullable(), // Optional Lucide icon name string
+    criteriaDesc: z.string().max(500).optional().nullable(), // Optional text criteria
+  })
+  .strict();
+
+export const UpdateUserRoleSchema = z
+  .object({
+    role: z.nativeEnum(UserRole), // Ensure role is a valid UserRole enum value
+  })
+  .strict();
+
 type CreatePositionData = z.infer<typeof CreatePositionSchema>;
+type CreateBadgeData = z.infer<typeof CreateBadgeSchema>;
+type UpdateUserRoleData = z.infer<typeof UpdateUserRoleSchema>;
 // Define type for the verification payload
 export type VerifyPositionPayload = {
   isVerified: boolean; // true for approve, false for 'reject' (or un-verify)
+};
+
+export type AdminUserListItem = {
+  // Define specific type for user list
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  role: UserRole;
+  points: number;
+  position: { name: string | null } | null; // Just position name
+  isPositionVerified: boolean;
+  createdAt: Date;
 };
 
 /**
@@ -183,4 +213,102 @@ export const listAllPositions = async (): Promise<Position[]> => {
   return prisma.position.findMany({
     orderBy: { name: "asc" },
   });
+};
+
+/** Lists all badge definitions. Requires ADMIN. */
+export const listAllBadges = async (): Promise<Badge[]> => {
+  return prisma.badge.findMany({
+    orderBy: { name: "asc" },
+  });
+};
+
+/** Creates a new Badge definition. Requires ADMIN. */
+export const createBadge = async (data: CreateBadgeData): Promise<Badge> => {
+  const { name, description, iconName, criteriaDesc } = data;
+  const normalizedName = name; // Keep case for display, check case-insensitively
+
+  const existingBadge = await prisma.badge.findFirst({
+    where: { name: { equals: normalizedName, mode: "insensitive" } },
+  });
+  if (existingBadge) {
+    throw new ConflictError(`A badge named '${name}' already exists.`);
+  }
+
+  return prisma.badge.create({
+    data: {
+      name: normalizedName,
+      description,
+      iconName: iconName || null,
+      criteriaDesc: criteriaDesc || null,
+    },
+  });
+};
+
+/** Lists all users for Admin view with pagination/search. Requires ADMIN. */
+export const listAllUsersAdmin = async (
+  limit: number = 20,
+  page: number = 1,
+  searchTerm?: string | null
+): Promise<{ data: AdminUserListItem[]; totalCount: number }> => {
+  const skip = (page - 1) * limit;
+  let whereClause: Prisma.UserWhereInput = {};
+
+  if (searchTerm) {
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+    ];
+  }
+
+  const [users, totalCount] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        // Select fields needed for AdminUserListItem type
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        role: true,
+        points: true,
+        position: { select: { name: true } },
+        isPositionVerified: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: skip,
+    }),
+    prisma.user.count({ where: whereClause }),
+  ]);
+
+  const data: AdminUserListItem[] = users; // Assign type explicitly
+  return { data, totalCount };
+};
+
+/** Updates a specific user's role. Requires ADMIN. */
+export const updateUserRole = async (
+  targetUserId: string,
+  payload: UpdateUserRoleData
+): Promise<{ id: string; role: UserRole }> => {
+  // Check if target user exists (optional, update throws if not found)
+  const userExists = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true },
+  });
+  if (!userExists) {
+    throw new NotFoundError("Target user");
+  }
+
+  // Cannot change own role via this method? Add check if needed.
+  // if (adminUserId === targetUserId) throw new BadRequestError("Cannot change your own role.")
+
+  const updatedUser = await prisma.user.update({
+    where: { id: targetUserId },
+    data: {
+      role: payload.role,
+    },
+    select: { id: true, role: true }, // Return minimal confirmation
+  });
+  return updatedUser;
 };

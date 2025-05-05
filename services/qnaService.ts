@@ -240,7 +240,7 @@ export const getQuestionDetails = async (
       acceptedAnswer: { select: { id: true } },
     },
   });
-
+  console.log(question)
   if (!question) {
     throw new NotFoundError("Question");
   }
