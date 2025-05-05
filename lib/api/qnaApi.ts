@@ -1,9 +1,8 @@
-// Define this outside the component, or import from e.g., '@/lib/api/qnaApi.ts'
-// Ensure the backend API route is POST /api/questions/${questionId}/answers
-// and expects { content: Value } in the body.
+// Place this outside your component, e.g., at the top of the file
+// or preferably in a dedicated API service file like 'lib/api/qnaApi.ts'
+// and then import it into answer-form.tsx
 
-import { Value } from "@udecode/plate"; // Import Value type if needed elsewhere
-import { toast } from "sonner"; // Import toast for error handling here too
+import type { Value } from "@udecode/plate"; // Ensure Value type is imported
 
 // Define the expected input type for the API call
 interface PostAnswerPayload {
@@ -12,45 +11,80 @@ interface PostAnswerPayload {
 }
 
 // Define the expected success response type from the API (adjust as needed)
+// Example: Assuming the API returns the newly created answer object
 type PostAnswerResponse = {
   id: string; // ID of the newly created answer
-  // Include other fields if the API returns them
+  content: Value;
+  createdAt: string; // Or Date
+  authorId: string;
+  questionId: string;
+  // Include other fields returned by your specific API endpoint
 };
 
-async function postAnswerApi(
-  payload: PostAnswerPayload
-): Promise<PostAnswerResponse> {
-  const { questionId, content } = payload;
-  const apiUrl = `/api/questions/${questionId}/answers`;
-  console.log(`[AnswerForm] Posting to: ${apiUrl}`); // Debug log
+/**
+ * Sends a new answer to the backend API.
+ * @param payload - An object containing questionId and the answer content (Plate Value).
+ * @returns The newly created answer data from the API.
+ * @throws An error if the API request fails.
+ */
+export async function postAnswerApi(payload: PostAnswerPayload): Promise<PostAnswerResponse> { // Use specific return type
+    const { questionId, content } = payload;
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // Send only the necessary content field in the body, matching backend expectation
-    body: JSON.stringify({ content: content }),
-  });
-
-  if (!response.ok) {
-    let errorMsg = "Failed to post answer.";
-    try {
-      const errorData = await response.json();
-      // Look for specific validation errors or general message
-      const validationError =
-        errorData.details?.[0]?.message ||
-        errorData.errors?.[Object.keys(errorData.errors)[0]]?.[0];
-      errorMsg =
-        validationError ||
-        errorData.error ||
-        errorData.message ||
-        `Request failed (${response.status})`;
-    } catch (e) {
-      errorMsg = `Request failed (${response.status})`;
+    // Validate input minimally (more robust validation via Zod is in the form)
+    if (!questionId || !content) {
+        throw new Error("Question ID and answer content are required.");
     }
-    console.error(`[AnswerForm] API Error (${response.status}): ${errorMsg}`); // Debug log
-    throw new Error(errorMsg); // Throw error for useMutation's onError
-  }
 
-  console.log("[AnswerForm] API Success"); // Debug log
-  return response.json(); // Return the created answer data (or success indicator)
+    // Construct the correct API endpoint URL
+    const apiUrl = `/api/questions/${questionId}/answers`; // MAKE SURE THIS MATCHES YOUR ACTUAL API ROUTE
+
+    console.log(`[postAnswerApi] Posting to: ${apiUrl}`); // Debug log
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Include authentication headers if your API requires it
+                // e.g., Authorization: `Bearer ${token}`
+            },
+            // Ensure the body matches what your API endpoint expects
+            // Usually just the content field for creating an answer
+            body: JSON.stringify({ content: content }),
+        });
+
+        console.log(`[postAnswerApi] Response status: ${response.status}`); // Debug log
+
+        // Check if the request was successful
+        if (!response.ok) {
+            let errorMsg = `Failed to post answer (status: ${response.status})`;
+            try {
+                // Attempt to parse more specific error from backend
+                const errorData = await response.json();
+                console.error("[postAnswerApi] API Error Response Body:", errorData); // Log error details
+                const validationError = errorData.details?.[0]?.message || errorData.errors?.[Object.keys(errorData.errors)[0]]?.[0];
+                errorMsg = validationError || errorData.error || errorData.message || errorMsg;
+            } catch (e) {
+                // Response body wasn't JSON or parsing failed
+                errorMsg = `Request failed (${response.status} ${response.statusText})`;
+            }
+            throw new Error(errorMsg); // Throw error for useMutation's onError
+        }
+
+        // Parse the successful JSON response
+        const responseData = await response.json();
+        console.log("[postAnswerApi] API Success Response Body:", responseData); // Debug log
+        return responseData as PostAnswerResponse; // Return the created answer data
+
+    } catch (error) {
+         // Catch potential network errors or errors thrown above
+         console.error("[postAnswerApi] Fetch Error:", error);
+         // Re-throw the error so useMutation's onError can handle it
+         // Ensure it's an Error object for consistent handling
+         if (error instanceof Error) {
+             throw error;
+         } else {
+             throw new Error("An unknown error occurred while posting the answer.");
+         }
+    }
 }

@@ -9,6 +9,7 @@ import {
   ForbiddenError,
   NotFoundError, // Import custom errors
 } from "@/lib/api/responses";
+import { Value } from "@udecode/plate";
 
 // Define or import AuthenticatedUser type
 interface AuthenticatedUser {
@@ -240,7 +241,7 @@ export const getQuestionDetails = async (
       acceptedAnswer: { select: { id: true } },
     },
   });
-  console.log(question)
+  console.log(question);
   if (!question) {
     throw new NotFoundError("Question");
   }
@@ -338,4 +339,44 @@ export const deleteQuestion = async (
   // --- End Placeholder ---
 
   // throw new Error("Delete functionality not yet implemented."); // Use this once ready
+};
+
+/**
+ * Creates a new answer for a specific question.
+ */
+export const createAnswerForQuestion = async (
+  questionId: string,
+  content: Value, // Receive Plate Value type
+  authorId: string
+) => {
+  // 1. Verify Question Exists (already done in API route, but can double-check)
+  const questionExists = await prisma.question.findUnique({
+    where: { id: questionId },
+    select: { id: true },
+  });
+  if (!questionExists) throw new NotFoundError("Question");
+
+  // 2. Create Answer
+  const newAnswer = await prisma.answer.create({
+    data: {
+      content: content as any, // Cast content (Prisma expects JsonValue)
+      questionId: questionId,
+      authorId: authorId,
+    },
+    select: {
+      // Select fields needed for API response
+      id: true,
+      content: true,
+      createdAt: true,
+      authorId: true,
+      questionId: true,
+      // author: { select: { id: true, name: true, image: true } }
+    },
+  });
+
+  // 3. TODO: Award points / Trigger notifications
+  // await awardPointsForAnswer(authorId, newAnswer.id);
+  // await notifyQuestionAuthor(questionId, newAnswer.id, authorId);
+
+  return newAnswer;
 };
