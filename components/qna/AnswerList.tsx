@@ -1,5 +1,5 @@
 // components\qna\AnswerList.tsx
-import React, { useState } from "react"; // Added useState
+import React, { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { Check, ThumbsUp, UserIcon, MessageSquare } from "lucide-react";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea"; // Added Textarea
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // Aceternity UI (Optional)
@@ -23,34 +23,34 @@ import { type Value } from "@udecode/plate";
 import { useCreateEditor } from "@/components/editor/use-create-editor";
 import { Editor } from "@/components/plate-ui/editor";
 
-// Types and hooks
-import type { DetailedQuestion } from "@/lib/qna"; // Ensure Answer type includes author, votes, userVote, isAccepted etc.
-import { useVoteMutation } from "@/hooks/useVoteMutation"; // Assuming you have this
-// import { useAcceptAnswerMutation } from "@/hooks/useAcceptAnswerMutation"; // Placeholder
-// import { useFetchComments } from "@/hooks/useFetchComments"; // Placeholder
-// import { usePostCommentMutation } from "@/hooks/usePostCommentMutation"; // Placeholder
+// Types and hooks (Keep your actual imports)
+import type { DetailedQuestion } from "@/lib/qna";
+import { useVoteMutation } from "@/hooks/useVoteMutation";
+// import { useAcceptAnswerMutation } from "@/hooks/useAcceptAnswerMutation";
+// import { useFetchComments } from "@/hooks/useFetchComments";
+// import { usePostCommentMutation } from "@/hooks/usePostCommentMutation";
 
 // --- Types ---
-// Extract Answer type from the detailed question type
 type Answer = DetailedQuestion["answers"][number] & {
-  // Explicitly add fields if not directly in Prisma type from question
-  // e.g., voteCount?: number;
+  // Add potential missing fields if needed
+  // voteCount?: number;
   // userVote?: { id: string; voteType: string; } | null;
+  // _count?: { comments?: number }; // Example for comment count
 };
 
 interface AnswerListProps {
   questionId: string;
   answers: Answer[];
   questionAuthorId: string;
-  currentUserId?: string | null; // ID of the currently logged-in user
+  currentUserId?: string | null;
 }
 
-// --- Single Answer Component (Defined within AnswerList file or imported) ---
+// --- Single Answer Component ---
 const AnswerItem: React.FC<{
   answer: Answer;
   currentUserId?: string | null;
   questionAuthorId: string;
-  questionId: string; // Pass questionId for context if needed by mutations
+  questionId: string;
 }> = ({ answer, currentUserId, questionAuthorId, questionId }) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -70,13 +70,22 @@ const AnswerItem: React.FC<{
 
   const isAccepted = !!answer.isAccepted;
 
-  // --- Voting ---
+  // --- Mutations & Data Fetching (Placeholders - Use your actual hooks) ---
   const { mutate: voteAnswer, isPending: isVoting } = useVoteMutation(
     "answer",
     answer.id
   );
+  // const { mutate: acceptAnswer, isPending: isAccepting } = useAcceptAnswerMutation();
+  const isAccepting = false; // Placeholder
+  // const { data: comments, isLoading: isLoadingComments } = useFetchComments(answer.id, { enabled: showComments });
+  const comments: any[] = []; // Placeholder
+  const isLoadingComments = false; // Placeholder
+  // const { mutate: postComment, isPending: isPostingComment } = usePostCommentMutation();
+  const isPostingComment = false; // Placeholder
+
   const userHasVoted = !!answer.userVote;
 
+  // --- Handlers ---
   const handleVote = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!currentUserId) {
@@ -86,22 +95,12 @@ const AnswerItem: React.FC<{
     voteAnswer({ voteType: "UPVOTE" });
   };
 
-  // --- Accepting Answer (Placeholder) ---
-  // const { mutate: acceptAnswer, isPending: isAccepting } = useAcceptAnswerMutation(); // Placeholder hook
-  const isAccepting = false; // Placeholder state
   const handleAcceptAnswer = () => {
     if (!currentUserId || currentUserId !== questionAuthorId) return;
-    // acceptAnswer({ answerId: answer.id, questionId }); // Call mutation
     console.log("Trigger accept answer mutation for:", answer.id);
-    toast.info("Accept answer action triggered (implement mutation).");
+    toast.info("Accept action triggered (implement mutation).");
+    // acceptAnswer({ answerId: answer.id, questionId });
   };
-
-  // --- Comments (Placeholders) ---
-  // const { data: comments, isLoading: isLoadingComments } = useFetchComments(answer.id, { enabled: showComments }); // Fetch only when shown
-  const comments: any[] = []; // Placeholder data
-  const isLoadingComments = false; // Placeholder state
-  // const { mutate: postComment, isPending: isPostingComment } = usePostCommentMutation(); // Placeholder hook
-  const isPostingComment = false; // Placeholder state
 
   const handleToggleComments = () => setShowComments(!showComments);
 
@@ -112,28 +111,46 @@ const AnswerItem: React.FC<{
       else toast.error("Comment cannot be empty.");
       return;
     }
-    // postComment({ answerId: answer.id, content: commentText }); // Call mutation
     console.log("Trigger post comment mutation:", {
       answerId: answer.id,
       content: commentText,
     });
     toast.info("Post comment action triggered (implement mutation).");
-    setCommentText(""); // Clear textarea optimistically or on success
+    // postComment({ answerId: answer.id, content: commentText }, { onSuccess: () => setCommentText('') });
+    setCommentText("");
+  };
+
+  // --- Helper function for short time format ---
+  const formatShortTime = (date: Date): string => {
+    const str = formatDistanceToNow(date, { addSuffix: true });
+    return str
+      .replace("about ", "")
+      .replace("less than a minute ago", "<1m")
+      .replace(" minutes", "m")
+      .replace(" minute", "m")
+      .replace(" hours", "h")
+      .replace(" hour", "h")
+      .replace(" days", "d")
+      .replace(" day", "d")
+      .replace(" ago", "");
   };
 
   // --- Render Logic ---
   const AnswerCardContent = (
+    // Card container - ensure no extra padding/margin here affects footer visually
     <Card
       className={cn(
-        "mb-6 transition-all duration-300 ease-in-out",
-        !isAccepted && "hover:shadow-md", // Only apply hover shadow if not accepted (gradient provides highlight)
-        "bg-card" // Ensure background for non-accepted state
+        "mb-6 transition-shadow duration-300 ease-in-out", // Use transition-shadow
+        !isAccepted && "hover:shadow-md",
+        "bg-card border border-border" // Explicit border
       )}
     >
-      <CardContent className="p-6">
-        {/* Answer Content */}
+      {/* Main Content - Ensure margin-bottom is controlled if needed */}
+      <CardContent className="p-4 md:p-6">
+        {" "}
+        {/* Standard padding here */}
         <Plate editor={editor} readOnly>
-          <div className="prose prose-sm sm:prose-base dark:prose-invert max-w-none mb-4">
+          <div className="prose prose-sm sm:prose-base dark:prose-invert max-w-none">
             <Editor variant="ai" readOnly />
           </div>
         </Plate>
@@ -141,208 +158,220 @@ const AnswerItem: React.FC<{
 
       <Separator />
 
-      <CardFooter className="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        {/* Left Side: Actions (Vote, Accept) - Keep together, don't shrink initially */}
+      {/* ================= FOOTER START ================= */}
+      {/* Goal: Minimal height, single row ideally, wrap minimally */}
+      <CardFooter
+        className={cn(
+          "flex flex-row flex-wrap items-center justify-between", // Core layout: row, wrap, space between main groups
+          "gap-x-2 gap-y-1", // Minimal gaps between elements/wrapped rows
+          "p-1.5", // Minimal padding (6px)
+          "min-h-[28px]" // Explicit minimum height (h-7 = 28px)
+        )}
+      >
+        {/* --- Left Group: Actions --- */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {" "}
+          {/* Don't shrink actions initially */}
           {/* Vote Button */}
           <Button
             variant={userHasVoted ? "default" : "outline"}
-            size="sm" // Keep size 'sm' for reasonable click target
+            size="sm" // Base size, override below
             onClick={handleVote}
             disabled={isVoting || !currentUserId}
             aria-pressed={userHasVoted}
+            // Explicit minimal styling
             className={cn(
-              "flex items-center gap-1.5 transition-all duration-200 h-8", // Reduced gap, set height
-              userHasVoted ? "border-primary/50" : "border"
+              "flex items-center gap-0.5 h-6 px-1.5 text-xs leading-none", // h-6 (24px), tiny gap/padding/text
+              "transition-all duration-200 border", // Ensure border exists for outline
+              userHasVoted
+                ? "border-primary/50 bg-primary text-primary-foreground"
+                : "border-border"
             )}
           >
-            <ThumbsUp className="h-4 w-4" /> {/* Icon size is fine */}
-            <span className="text-xs">{answer.voteCount || 0}</span>{" "}
-            {/* Maybe smaller text */}
+            <ThumbsUp className="h-3 w-3 flex-shrink-0" />
+            <span>{answer.voteCount || 0}</span>
           </Button>
-
-          {/* Accept Answer Button (Conditional) */}
+          {/* Accept Answer Button */}
           {currentUserId === questionAuthorId && !isAccepted && (
             <Button
               variant="outline"
-              size="sm"
+              size="sm" // Base size
               disabled={isAccepting}
               onClick={handleAcceptAnswer}
-              className="border-dashed border-green-500/50 text-green-600 dark:text-green-500 hover:border-solid hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-700 dark:hover:text-green-500 h-8 px-2" // Reduced padding, set height
               aria-label="Accept this answer"
+              // Explicit minimal styling
+              className={cn(
+                "flex items-center gap-0.5 h-6 px-1 text-xs leading-none", // h-6, tiny gap/padding/text
+                "border-dashed border-green-500/50 text-green-600 dark:text-green-500",
+                "hover:border-solid hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-700 dark:hover:text-green-500"
+              )}
             >
-              <Check className="h-4 w-4 mr-1" /> {/* Reduced margin */}
-              <span className="text-xs">
-                {isAccepting ? "Accepting..." : "Accept"}
-              </span>{" "}
-              {/* Smaller text */}
+              <Check className="h-3 w-3 mr-0.5 flex-shrink-0" />
+              <span>{isAccepting ? "..." : "Accept"}</span>
             </Button>
           )}
         </div>
 
-        {/* Right Side: Author Info, Accepted Badge, Comments Trigger - Allow wrapping and align right */}
-        <div className="flex items-center flex-wrap justify-end gap-x-2 gap-y-1 text-xs flex-grow min-w-0">
-          {" "}
-          {/* Reduced gaps, text-xs base, allow grow/shrink */}
-          {/* Accepted Badge */}
+        {/* --- Right Group: Meta Info --- */}
+        {/* This group grows/shrinks and wraps internally if needed */}
+        <div className="flex items-center flex-wrap justify-end gap-x-2 gap-y-0.5 text-xs leading-tight flex-grow min-w-0">
+          {/* Accepted Badge (only if accepted) */}
           {isAccepted && (
             <Badge
               variant="outline"
-              className="border-green-500 text-green-600 dark:text-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20 font-medium px-2 py-0.5 h-6" // Reduced padding, set height
+              // Explicit minimal styling
+              className="font-medium h-5 px-1 py-0 leading-none inline-flex items-center gap-0.5 text-xs border-green-500 text-green-600 dark:text-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20"
             >
-              <Check className="h-3 w-3 mr-1" /> {/* Smaller icon/margin */}
+              <Check className="h-3 w-3 flex-shrink-0" />
               Accepted
             </Badge>
           )}
+
           {/* Comments Trigger */}
           <Button
             variant="ghost"
-            size="sm" // Keep sm for tap area
+            size="sm" // Base size
             onClick={handleToggleComments}
-            className="text-muted-foreground hover:text-primary px-1 h-7 flex items-center" // Adjust padding/height
+            // Explicit minimal styling
+            className="flex items-center gap-0.5 h-6 px-1 text-xs leading-none text-muted-foreground hover:text-primary hover:bg-transparent" // Transparent bg on hover
           >
-            <MessageSquare className="h-3.5 w-3.5 mr-1" />{" "}
-            {/* Smaller icon/margin */}
-            <span className="text-xs">Comments</span>{" "}
-            {/* Ensure text is small */}
+            <MessageSquare className="h-3 w-3 flex-shrink-0" />
+            <span className="hidden sm:inline">Comments</span>{" "}
+            {/* Hide text on xs */}
+            {/* Optionally show count: <span>({answer._count?.comments ?? 0})</span> */}
           </Button>
+
           {/* Author Info */}
-          <div className="flex items-center gap-1 text-muted-foreground flex-shrink min-w-0">
-            {" "}
-            {/* Reduced gap, allow shrink */}
-            <Avatar className="h-5 w-5">
+          {/* Using inline-flex for potentially tighter grouping */}
+          <div className="inline-flex items-center gap-1 text-muted-foreground flex-shrink-0">
+            <Avatar className="h-4 w-4 flex-shrink-0">
               {" "}
-              {/* Small avatar */}
+              {/* Min avatar */}
               <AvatarImage
                 src={answer.author?.image || undefined}
                 alt={answer.author?.name || "User"}
               />
-              <AvatarFallback className="text-[10px]">
+              <AvatarFallback className="text-[9px] leading-none">
                 {answer.author?.name?.charAt(0)?.toUpperCase() || (
-                  <UserIcon size={10} />
+                  <UserIcon size={8} />
                 )}
               </AvatarFallback>
             </Avatar>
-            <span className="flex items-center gap-x-1 flex-shrink min-w-0">
+            {/* Combine Name (conditionally) + Time */}
+            <span className="inline-block truncate max-w-[80px] sm:max-w-[120px]">
               {" "}
-              {/* Allow shrink */}
+              {/* Truncate container */}
               <Link
                 href={`/app/profile/${answer.author?.id}`}
-                className="font-medium text-foreground hover:underline hover:text-primary transition-colors truncate" // Add truncate
+                className="font-medium text-foreground/80 hover:underline hover:text-primary transition-colors hidden sm:inline" // Hide name link on xs
               >
-                {answer.author?.name || "Anonymous User"}
+                {answer.author?.name?.substring(0, 10) || "Anon"}{" "}
+                {/* Short name */}
               </Link>
-              <span className="mx-1 hidden sm:inline">•</span>
               <time
                 dateTime={new Date(answer.createdAt).toISOString()}
-                className="whitespace-nowrap flex-shrink-0"
+                className="sm:ml-1 whitespace-nowrap text-muted-foreground/80 text-[11px]"
               >
                 {" "}
-                {/* Prevent time from shrinking */}
-                {formatDistanceToNow(new Date(answer.createdAt), {
-                  addSuffix: true,
-                })}
+                {/* Slightly smaller time text */}
+                {formatShortTime(new Date(answer.createdAt))}
               </time>
             </span>
           </div>
         </div>
       </CardFooter>
+      {/* ================= FOOTER END ================= */}
 
       {/* Conditionally Rendered Comments Section */}
       {showComments && (
-        <div className="px-6 pb-4 pt-4 border-t border-border/60 bg-muted/20">
-          {" "}
-          {/* Slight bg tint */}
-          <h4 className="text-sm font-semibold mb-3 text-muted-foreground">
+        // Ensure this section has minimal top margin/padding if needed
+        <div className="px-4 py-3 md:px-6 md:py-4 border-t border-border/60 bg-muted/20">
+          <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
             Comments
           </h4>
           {isLoadingComments ? (
-            <p className="text-xs text-muted-foreground italic">
-              Loading comments...
-            </p>
+            <p className="text-xs text-muted-foreground italic">Loading...</p>
           ) : comments.length > 0 ? (
-            <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
-              {" "}
-              {/* Scrollable comments */}
+            <div className="space-y-2 mb-3 max-h-60 overflow-y-auto pr-1">
               {comments.map((comment) => (
                 <div
                   key={comment.id}
-                  className="text-xs flex gap-2 items-start"
+                  className="text-xs flex gap-1.5 items-start"
                 >
-                  <Avatar className="h-5 w-5 mt-0.5">
+                  <Avatar className="h-5 w-5 mt-0.5 flex-shrink-0">
                     {/* <AvatarImage src={comment.author.image} /> */}
                     <AvatarFallback className="text-[10px]">
                       {comment.author?.name?.charAt(0)?.toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <span className="font-medium text-foreground mr-1.5">
+                    <span className="font-medium text-foreground mr-1">
                       {comment.author?.name || "Anon"}
                     </span>
-                    <span>{comment.content}</span>
-                    <span className="text-muted-foreground/80 ml-2">
-                      {/* {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })} */}
+                    <span className="text-foreground/90">
+                      {comment.content}
                     </span>
+                    {/* <span className="text-muted-foreground/70 ml-1.5 text-[10px]">({formatShortTime(new Date(comment.createdAt))})</span> */}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground mb-4 italic">
+            <p className="text-xs text-muted-foreground mb-3 italic">
               No comments yet.
             </p>
           )}
+
           {/* Add Comment Form */}
-          {currentUserId && ( // Only show form if logged in
+          {currentUserId && (
             <form
               onSubmit={handlePostComment}
               className="flex gap-2 items-start"
             >
-              <Avatar className="h-7 w-7 mt-1">
-                {/* Add current user avatar here */}
+              <Avatar className="h-6 w-6 mt-0.5 flex-shrink-0">
+                {/* Current user avatar */}
                 <AvatarFallback className="text-xs">
-                  {/* {currentUser?.name?.charAt(0)?.toUpperCase() || <UserIcon size={12}/>} */}
                   <UserIcon size={12} />
                 </AvatarFallback>
               </Avatar>
               <Textarea
                 placeholder="Add a comment..."
-                rows={2}
+                rows={1} // Start with 1 row
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                className="flex-grow text-sm min-h-[40px]" // Ensure small height
+                className="flex-grow text-xs min-h-[28px] resize-none" // Minimal height, no resize handle
               />
               <Button
                 type="submit"
                 size="sm"
                 disabled={isPostingComment || !commentText.trim()}
-                className="self-end" // Align button with bottom of textarea
+                className="h-7 self-end"
               >
+                {" "}
+                {/* Align button */}
                 {isPostingComment ? "..." : "Post"}
               </Button>
             </form>
           )}
         </div>
       )}
-    </Card>
+    </Card> // End of main AnswerItem Card
   );
 
   // Wrap with gradient only for accepted answers
   if (isAccepted) {
     return (
       <BackgroundGradient
-        className="rounded-lg p-0.5 shadow-md shadow-green-500/10" // Add subtle shadow effect
+        className="rounded-lg p-0.5 shadow-md shadow-green-500/10"
         containerClassName="rounded-lg"
-        animate={true} // Keep animation subtle
-        // Optional: Adjust gradient colors if needed for dark mode contrast
-        // gradientClassName="from-green-500/20 via-green-300/20 to-emerald-500/20 dark:from-green-400/10 dark:via-green-300/10 dark:to-emerald-400/10"
+        animate={true}
       >
         {AnswerCardContent}
       </BackgroundGradient>
     );
   }
 
-  return AnswerCardContent; // Return regular card if not accepted
+  return AnswerCardContent;
 };
 
 // --- Main AnswerList Component ---
@@ -353,6 +382,7 @@ export const AnswerList: React.FC<AnswerListProps> = ({
   currentUserId,
 }) => {
   if (!answers || answers.length === 0) {
+    // No changes needed here for footer height issue
     return (
       <div className="mt-8 border-t border-border pt-8">
         <div className="text-center py-10 bg-muted/30 rounded-lg border border-dashed">
@@ -360,16 +390,12 @@ export const AnswerList: React.FC<AnswerListProps> = ({
           <p className="text-muted-foreground">
             This question hasn't been answered yet.
           </p>
-          {/* Optional: Link/button to encourage answering */}
-          {/* <Button variant="link" className="mt-2" onClick={() => document.getElementById('answer-form')?.scrollIntoView({ behavior: 'smooth' })}>
-             Be the first one to answer!
-          </Button> */}
         </div>
       </div>
     );
   }
 
-  // Sort answers: Accepted first, then by vote count (desc), then by creation date (asc)
+  // Sort answers (no changes needed)
   const sortedAnswers = [...answers].sort((a, b) => {
     if (a.isAccepted && !b.isAccepted) return -1;
     if (!a.isAccepted && b.isAccepted) return 1;
@@ -384,9 +410,8 @@ export const AnswerList: React.FC<AnswerListProps> = ({
         <MessageSquare className="h-5 w-5 mr-2 text-muted-foreground" />
         {sortedAnswers.length} Answer{sortedAnswers.length !== 1 ? "s" : ""}
       </h2>
-      <div className="space-y-6">
-        {" "}
-        {/* Add space between AnswerItems */}
+      {/* Reduced space between answers if desired */}
+      <div className="space-y-4">
         {sortedAnswers.map((answer) => (
           <AnswerItem
             key={answer.id}
@@ -401,16 +426,16 @@ export const AnswerList: React.FC<AnswerListProps> = ({
   );
 };
 
-// --- Skeleton Component (Unchanged) ---
+// --- Skeleton Component (No changes needed) ---
 export const AnswerListSkeleton = () => (
   <div className="mt-8 border-t border-border pt-8 animate-pulse">
     <div className="h-8 bg-muted rounded-md w-40 mb-6"></div>
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {" "}
+      {/* Match reduced space-y */}
       {[1, 2].map((i) => (
-        <Card key={i} className="mb-6 overflow-hidden">
-          {" "}
-          {/* Added overflow hidden */}
-          <CardContent className="p-6">
+        <Card key={i} className="overflow-hidden">
+          <CardContent className="p-4 md:p-6">
             <div className="space-y-3">
               <div className="h-4 bg-muted rounded-md w-full"></div>
               <div className="h-4 bg-muted rounded-md w-full"></div>
@@ -418,12 +443,20 @@ export const AnswerListSkeleton = () => (
             </div>
           </CardContent>
           <Separator className="bg-muted h-[1px]" />
-          <CardFooter className="p-4 flex justify-between items-center">
-            <div className="flex gap-2">
-              <div className="h-8 bg-muted rounded-md w-16"></div>
-              <div className="h-8 bg-muted rounded-md w-20"></div>
+          <CardFooter className="p-1.5 min-h-[28px]">
+            {" "}
+            {/* Match footer padding/height */}
+            <div className="flex justify-between w-full items-center">
+              <div className="flex gap-1.5">
+                <div className="h-6 w-12 bg-muted rounded-md"></div>
+                {/* Optional: Skeleton for accept button */}
+              </div>
+              <div className="flex gap-2">
+                <div className="h-5 w-16 bg-muted rounded-md"></div>
+                <div className="h-6 w-6 bg-muted rounded-md"></div>
+                <div className="h-6 w-20 bg-muted rounded-md"></div>
+              </div>
             </div>
-            <div className="h-8 bg-muted rounded-md w-48"></div>
           </CardFooter>
         </Card>
       ))}
