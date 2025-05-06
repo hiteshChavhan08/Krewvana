@@ -1,137 +1,141 @@
-// components/qna/answer-form.tsx
+// components\qna\answer-form.tsx
 "use client";
 
-import React, { useEffect } from "react"; // Added useEffect
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import type React from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import type { Value } from "@udecode/plate";
-import { DndProvider } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
-import { Plate } from "@udecode/plate/react";
-// import { resetEditor } from "@udecode/plate/react";
-
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-// 👇 Import the refined schema
-import { CreateAnswerSchema, CreateAnswerInput } from "@/lib/validations/qna";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCreateEditor } from "@/components/editor/use-create-editor";
-import { Editor, EditorContainer } from "@/components/plate-ui/editor";
-import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { postAnswerApi } from "@/lib/api/qnaApi";
+
+// Plate imports
+import { Plate } from "@udecode/plate/react";
+import { useCreateEditor } from "@/components/editor/use-create-editor";
+import { Editor } from "@/components/plate-ui/editor";
+import type { Value } from "@udecode/plate";
+
+// UI components
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 interface AnswerFormProps {
   questionId: string;
-  onAnswerAdded: () => void;
+  onAnswerAdded: () => void; // Callback to potentially refetch data
 }
 
-const initialEditorValue: Value = [{ type: "p", children: [{ text: "" }] }];
+const initialValue: Value = [{ type: "p", children: [{ text: "" }] }];
 
-export function AnswerForm({ questionId, onAnswerAdded }: AnswerFormProps) {
-  const queryClient = useQueryClient();
+export const AnswerForm: React.FC<AnswerFormProps> = ({
+  questionId,
+  onAnswerAdded,
+}) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editorValue, setEditorValue] = useState<Value>(initialValue);
 
-  const editor = useCreateEditor({ value: initialEditorValue });
-
-  const form = useForm<CreateAnswerInput>({
-    resolver: zodResolver(CreateAnswerSchema), // Uses the potentially updated schema
-    defaultValues: { content: initialEditorValue },
-    mode: "onChange",
+  // Create editor instance - ensure it updates state correctly
+  const editor = useCreateEditor({
+    id: `answer-editor-${questionId}`, // Unique ID per question instance
+    value: editorValue,
+    // onChange: (newValue) => {
+    //   setEditorValue(newValue); // Keep track of the editor's value
+    // },
   });
 
-  const mutation = useMutation({
-    mutationFn: (formData: CreateAnswerInput) =>
-      postAnswerApi({ questionId, content: formData.content }),
-    onSuccess: (data) => {
-      toast.success("Success!", {
-        description: "Your answer has been posted.",
-      });
-      form.reset();
-      // resetEditor(editor);
-      editor.tf.reset();
-      onAnswerAdded?.();
-    },
-    onError: (error: Error) => {
-      toast.error("Error Posting Answer", {
-        description: error.message || "Could not save your answer.",
-      });
-      console.error("Submit Answer Mutation Error:", error);
-    },
-  });
+  // Simple check if editor is effectively empty
+  const isEditorEmpty = (value: Value): boolean => {
+    if (!value || value.length === 0) return true;
+    if (value.length === 1) {
+      const node = value[0];
+      if (
+        node.type === "p" &&
+        node.children?.length === 1 &&
+        node.children[0].text === ""
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
 
-  // Form submission triggers the mutation *after* RHF validation
-  function onSubmit(values: CreateAnswerInput) {
-    console.log("Validation Passed. Submitting via mutation:", values); // Check if this logs
-    mutation.mutate(values);
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  // --- Debug: Log validation errors ---
-  //   useEffect(() => {
-  //     if (Object.keys(form.formState.errors).length > 0) {
-  //         console.log("RHF Validation Errors:", form.formState.errors);
-  //     }
-  //   }, [form.formState.errors]);
-  // --- End Debug ---
+    // Validate content
+    if (isEditorEmpty(editorValue)) {
+      toast.error("Please enter your answer before submitting.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const toastId = toast.loading("Submitting your answer...");
+
+    try {
+      const response = await fetch(`/api/qna/questions/${questionId}/answers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: editorValue }), // Send the editor's value
+      });
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: "Failed to submit answer. Server error." }));
+        throw new Error(errorData.message || "Failed to submit answer");
+      }
+
+      toast.success("Answer submitted successfully!", { id: toastId });
+
+      // Reset form and notify parent
+      setEditorValue(initialValue); // Reset state value
+      // editor.reset(); // Optional: If plate editor has a reset method
+      onAnswerAdded(); // Trigger refetch or update
+    } catch (error: any) {
+      console.error("Error submitting answer:", error);
+      toast.error(
+        error.message || "Failed to submit your answer. Please try again.",
+        { id: toastId }
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-6">
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="sr-only">Your Answer</FormLabel>
-              <FormControl>
-                <DndProvider backend={HTML5Backend}>
-                  <Plate
-                    editor={editor}
-                    // value={field.value} // Controlled by RHF
-                    onChange={(
-                      // 👇 Check Plate docs for exact argument type, could be editor or options object
-                      // Assuming editor instance is passed or available on options
-                      newEditorState // Or options: { editor: TPlateEditor<Value> }
-                    ) => {
-                      // Get the current value from the editor instance
-                      // Use editor.children for newer versions, or editor.value if applicable
-                      const currentValue = editor.children as Value; // Or editor.value
-                      console.log("Plate onChange - new value:", currentValue); // Debug log
-                      field.onChange(currentValue); // Update RHF with the value from the editor state
-                    }}
-                  >
-                    <EditorContainer className={cn(/* styles */)}>
-                      <Editor
-                        ref={field.ref}
-                        name={field.name}
-                        onBlur={field.onBlur}
-                        placeholder="Provide a detailed answer..."
-                        className="min-h-[150px] w-full resize-none px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-md border border-input"
-                        // readOnly={mutation.isPending} // Optional
-                      />
-                    </EditorContainer>
-                  </Plate>
-                </DndProvider>
-              </FormControl>
-              {/* Ensure FormMessage is rendered to see Zod errors */}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Post Your Answer
-        </Button>
+    <div className="mt-8 pt-8 border-t">
+      <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-4">
+        Your Answer
+      </h2>
+      <form onSubmit={handleSubmit} id="answer-form">
+        {/* Wrap Plate editor in Card for styling consistency */}
+        <Card className="overflow-hidden border shadow-sm">
+          <Plate editor={editor}>
+            <Editor
+              placeholder="Write your detailed answer here..."
+              variant="ai" // Or your preferred variant
+              className="min-h-[200px] bg-background p-4" // Ensure padding inside editor
+              // Note: Plate's Editor might not directly accept onChange,
+              // it's handled by useCreateEditor hook's options
+            />
+          </Plate>
+        </Card>
+
+        <div className="mt-4 flex justify-end">
+          <Button
+            type="submit"
+            disabled={isSubmitting || isEditorEmpty(editorValue)}
+            className="px-6 min-w-[150px]"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              "Post Your Answer"
+            )}
+          </Button>
+        </div>
       </form>
-    </Form>
+    </div>
   );
-}
+};
