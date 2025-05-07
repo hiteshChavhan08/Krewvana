@@ -243,7 +243,7 @@ export default function QuestionsPage() {
         {/* Reduced padding */}
         <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
           <h1 className="text-xl md:text-2xl font-bold">{pageTitle}</h1>
-          <Button asChild size="default">
+          <Button size="default">
             {" "}
             {/* Link wrapped in Button */}
             <Link
@@ -362,7 +362,7 @@ export default function QuestionsPage() {
                 : "No questions have been asked yet."}
             </p>
             {!currentTag && !currentSearch && (
-              <Button asChild variant="default" size="sm">
+              <Button variant="default" size="sm">
                 <Link href="/app/qna/ask">Be the first to ask!</Link>
               </Button>
             )}

@@ -17,6 +17,7 @@ import { TopThreePodium } from "@/components/leaderboard/TopThreePodium";
 import { LeaderboardTable } from "@/components/leaderboard/LeaderboardTable";
 import { LeaderboardSkeleton } from "@/components/leaderboard/LeaderboardSkeleton";
 import { WarpBackground } from "@/components/magicui/warp-background";
+import { RetroGrid } from "@/components/magicui/retro-grid";
 
 // --- NEW: API Fetch Function for the Client ---
 async function fetchLeaderboardDataFromApi(
@@ -98,41 +99,41 @@ export default function LeaderboardPage() {
 
   // --- Main Content Render (remains the same structure) ---
   return (
-    <WarpBackground className="container mx-auto">
-      {/* <div className=""> */}
-        <div className="relative z-10">
-          <h1 className="text-3xl md:text-4xl font-bold mb-30 text-center">
-            <Trophy className="h-8 w-8 text-yellow-500" /> 
-            <span className="">Leaderboard</span>
-          </h1>
+    // <WarpBackground className="container mx-auto">
+    <div className="container mx-auto">
+      <RetroGrid></RetroGrid>
+      <div className="relative z-10">
+        <h1 className="text-3xl md:text-4xl font-bold mb-30 text-center">
+          <Trophy className="h-8 w-8 text-yellow-500" />
+          <span className="">Leaderboard</span>
+        </h1>
 
-          {topThree.length >= 1 && <TopThreePodium users={topThree} />}
-          {/* Simplified handling for <3 users */}
-          {topThree.length > 0 && topThree.length < 3 && (
-            <div className="flex justify-center gap-4 mb-10">
-              {/* Render simplified cards or adapt podium */}
-            </div>
-          )}
+        {topThree.length >= 1 && <TopThreePodium users={topThree} />}
+        {/* Simplified handling for <3 users */}
+        {topThree.length > 0 && topThree.length < 3 && (
+          <div className="flex justify-center gap-4 mb-10">
+            {/* Render simplified cards or adapt podium */}
+          </div>
+        )}
 
-          {leaderboard && leaderboard.length === 0 && (
-            <p className="text-center text-muted-foreground py-16 text-lg">
-              The leaderboard is empty!
-            </p>
-          )}
+        {leaderboard && leaderboard.length === 0 && (
+          <p className="text-center text-muted-foreground py-16 text-lg">
+            The leaderboard is empty!
+          </p>
+        )}
 
-          {restOfLeaderboard.length > 0 && (
-            <>
-              <h2 className="text-xl font-semibold mb-4 mt-8 ...">
-                Rankings #{topThree.length + 1} - #{leaderboard?.length}
-              </h2>
-              <LeaderboardTable
-                users={restOfLeaderboard}
-                highlightUserId={currentUserId}
-              />
-            </>
-          )}
-        </div>
-      {/* </div> */}
-    </WarpBackground>
+        {restOfLeaderboard.length > 0 && (
+          <div className="pb-6 px-8 bg-transparent">
+            <h2 className="text-xl font-semibold mb-4 mt-8">
+              Rankings #{topThree.length + 1} - #{leaderboard?.length}
+            </h2>
+            <LeaderboardTable
+              users={restOfLeaderboard}
+              highlightUserId={currentUserId}
+            />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

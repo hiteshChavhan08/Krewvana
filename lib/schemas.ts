@@ -3,11 +3,17 @@ import { ShoutoutType } from "@prisma/client";
 import { z } from "zod";
 
 export const KudosCreateSchema = z.object({
-  receiverId: z.string().cuid({ message: "Invalid receiver ID format" }),
+  receiverId: z.string().cuid({ message: "Please select a valid recipient." }),
   message: z
     .string()
-    .min(3, { message: "Message must be at least 3 characters long" })
-    .max(500, { message: "Message must be 500 characters or less" }),
+    .min(5, { message: "Message must be at least 5 characters long." })
+    .max(500, { message: "Message cannot exceed 500 characters." }) // Adjust max length
+    .trim(),
+  // Expect an array of CUID strings for categories
+  categoryIds: z
+    .array(z.string().cuid())
+    .min(1, { message: "Please select at least one category." }), // Require at least one category
+  // .max(3, { message: "You can select up to 3 categories." }) // Optional: Limit max categories
 });
 
 export type KudosCreateData = z.infer<typeof KudosCreateSchema>;

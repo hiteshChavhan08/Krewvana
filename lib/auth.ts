@@ -208,11 +208,21 @@ export const getCurrentUser = async (): Promise<Session["user"] | null> => {
   const session = await getCurrentSession();
   const user = session?.user ?? null;
   // console.log(
-    // "[getCurrentUser] Returning user object:",
-    // user ? `ID: ${user.id}, Role: ${user.role}` : "null"
+  // "[getCurrentUser] Returning user object:",
+  // user ? `ID: ${user.id}, Role: ${user.role}` : "null"
   // );
   return user;
 };
+
+export function isAdmin(
+  user: { id: string; role: UserRole } & {
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+  }
+) {
+  return user.role === UserRole.ADMIN;
+}
 
 // --- Re-export NextAuth handlers ---
 const handler = NextAuth(authOptions);

@@ -119,14 +119,12 @@ export default function QuestionPage() {
   if (error) {
     return (
       <div className="container max-w-4xl mx-auto py-8 px-4 md:px-6">
-        <Button variant="outline" size="sm" className="mb-6" asChild>
-          <Link href="/app/qna">
-            <span className="flex items-center">
-              {" "}
-              {/* Added span wrapper */}
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Questions
-            </span>
+        <Button variant="outline" size="sm" className="mb-6">
+          <Link href="/app/qna" className="flex items-center">
+            {" "}
+            {/* Ensure Link is the direct child */}
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Questions
           </Link>
         </Button>
         <div className="text-center py-10 border rounded-lg bg-destructive/5">
@@ -156,8 +154,8 @@ export default function QuestionPage() {
   return (
     <div className="container max-w-4xl mx-auto py-8 px-4 md:px-6">
       {/* Back Button */}
-      <Button variant="outline" size="sm" className="mb-6" asChild>
-        <Link href="/app/qna">
+      <Button variant="outline" size="sm" className="mb-6">
+        <Link href="/app/qna" className="flex items-center">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Questions
         </Link>
@@ -244,7 +242,7 @@ export default function QuestionPage() {
         <div id="answer-list">
           <AnswerList
             questionId={questionId}
-            answers={questionData.answers || []}
+            answers={questionData?.answers || []}
             questionAuthorId={questionData.author.id}
             currentUserId={currentUserId}
           />

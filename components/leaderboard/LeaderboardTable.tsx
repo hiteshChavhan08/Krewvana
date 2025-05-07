@@ -34,7 +34,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({
 
   return (
     // Use a card for better visual grouping and background
-    <Card className="mt-8 shadow-md">
+    <Card className="mt-8 shadow-md bg-transparent">
       <Table>
         <TableHeader>
           <TableRow>

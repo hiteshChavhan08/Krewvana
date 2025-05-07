@@ -1,8 +1,15 @@
 // components\qna\AnswerList.tsx
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { Check, ThumbsUp, UserIcon, MessageSquare } from "lucide-react";
+import {
+  Check,
+  ThumbsUp,
+  UserIcon,
+  MessageSquare,
+  Loader2,
+  Send,
+} from "lucide-react";
 import { toast } from "sonner";
 
 // UI components
@@ -26,16 +33,28 @@ import { Editor } from "@/components/plate-ui/editor";
 // Types and hooks (Keep your actual imports)
 import type { DetailedQuestion } from "@/lib/qna";
 import { useVoteMutation } from "@/hooks/useVoteMutation";
+import { VoteType } from "@prisma/client";
 // import { useAcceptAnswerMutation } from "@/hooks/useAcceptAnswerMutation";
 // import { useFetchComments } from "@/hooks/useFetchComments";
 // import { usePostCommentMutation } from "@/hooks/usePostCommentMutation";
 
 // --- Types ---
+type CommentWithAuthor = {
+  id: string;
+  content: string;
+  createdAt: string; // Assuming string from API, parse later
+  author: {
+    id: string;
+    name: string | null;
+    image: string | null;
+  } | null; // Allow null author? Handle gracefully
+};
+
+// Existing Answer type (ensure it has id)
 type Answer = DetailedQuestion["answers"][number] & {
-  // Add potential missing fields if needed
-  // voteCount?: number;
-  // userVote?: { id: string; voteType: string; } | null;
-  // _count?: { comments?: number }; // Example for comment count
+  voteCount?: number; // Add fields if not directly in DetailedQuestion
+  userVote?: VoteType | null;
+  // Potentially add _count: { comments: number } if available from backend
 };
 
 interface AnswerListProps {
@@ -53,8 +72,11 @@ const AnswerItem: React.FC<{
   questionId: string;
 }> = ({ answer, currentUserId, questionAuthorId, questionId }) => {
   const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<CommentWithAuthor[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
-
+  const [isPostingComment, setIsPostingComment] = useState(false);
   // --- Editor Setup ---
   const contentValue = (
     Array.isArray(answer.content) && answer.content.length > 0
@@ -78,10 +100,6 @@ const AnswerItem: React.FC<{
   // const { mutate: acceptAnswer, isPending: isAccepting } = useAcceptAnswerMutation();
   const isAccepting = false; // Placeholder
   // const { data: comments, isLoading: isLoadingComments } = useFetchComments(answer.id, { enabled: showComments });
-  const comments: any[] = []; // Placeholder
-  const isLoadingComments = false; // Placeholder
-  // const { mutate: postComment, isPending: isPostingComment } = usePostCommentMutation();
-  const isPostingComment = false; // Placeholder
 
   const userHasVoted = !!answer.userVote;
 
@@ -102,22 +120,89 @@ const AnswerItem: React.FC<{
     // acceptAnswer({ answerId: answer.id, questionId });
   };
 
-  const handleToggleComments = () => setShowComments(!showComments);
+  const handleToggleComments = () => {
+    const newState = !showComments;
+    setShowComments(newState);
+    // Fetch comments only when opening and if not already loaded/loading
+    if (
+      newState &&
+      comments.length === 0 &&
+      !isLoadingComments &&
+      !commentsError
+    ) {
+      fetchComments();
+    }
+  };
+  // --- Fetch Comments Logic ---
+  const fetchComments = useCallback(async () => {
+    if (!answer.id) return; // Safety check
 
-  const handlePostComment = (e: React.FormEvent) => {
+    setIsLoadingComments(true);
+    setCommentsError(null);
+    try {
+      const response = await fetch(`/api/answers/${answer.id}/comments`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch comments");
+      }
+      const data: CommentWithAuthor[] = await response.json();
+      setComments(data);
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+      setCommentsError(error.message || "Could not load comments.");
+      toast.error("Error", { description: "Could not load comments." });
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [answer.id]); // Depend on answer.id
+
+  // --- Post Comment Logic ---
+  const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentText.trim() || !currentUserId) {
-      if (!currentUserId) toast.error("Please sign in to comment.");
-      else toast.error("Comment cannot be empty.");
+    if (!commentText.trim()) {
+      toast.error("Comment cannot be empty.");
       return;
     }
-    console.log("Trigger post comment mutation:", {
-      answerId: answer.id,
-      content: commentText,
-    });
-    toast.info("Post comment action triggered (implement mutation).");
-    // postComment({ answerId: answer.id, content: commentText }, { onSuccess: () => setCommentText('') });
-    setCommentText("");
+    if (!currentUserId) {
+      // Should ideally be prevented by hiding form, but double check
+      toast.error("Please sign in to comment.");
+      return;
+    }
+
+    setIsPostingComment(true);
+    const postToastId = toast.loading("Posting comment...");
+
+    try {
+      const response = await fetch(`/api/answers/${answer.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: commentText }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Failed to post comment" }));
+        throw new Error(errorData.error || "Server error");
+      }
+
+      // Option 1: Add new comment locally (Optimistic-like, but after success)
+      // const newComment: CommentWithAuthor = await response.json();
+      // setComments(prev => [...prev, newComment]); // Add to end
+
+      // Option 2: Refetch all comments (Simpler, ensures consistency)
+      await fetchComments(); // Refetch comments after posting
+
+      setCommentText(""); // Clear input
+      toast.success("Comment Posted", { id: postToastId });
+    } catch (error: any) {
+      console.error("Error posting comment:", error);
+      toast.error("Failed to post comment", {
+        description: error.message,
+        id: postToastId,
+      });
+    } finally {
+      setIsPostingComment(false);
+    }
   };
 
   // --- Helper function for short time format ---
@@ -282,79 +367,134 @@ const AnswerItem: React.FC<{
       </CardFooter>
       {/* ================= FOOTER END ================= */}
 
-      {/* Conditionally Rendered Comments Section */}
+      {/* ================= COMMENT SECTION ================= */}
       {showComments && (
-        // Ensure this section has minimal top margin/padding if needed
         <div className="px-4 py-3 md:px-6 md:py-4 border-t border-border/60 bg-muted/20">
-          <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
+          <h4 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wider">
             Comments
           </h4>
-          {isLoadingComments ? (
-            <p className="text-xs text-muted-foreground italic">Loading...</p>
-          ) : comments.length > 0 ? (
-            <div className="space-y-2 mb-3 max-h-60 overflow-y-auto pr-1">
+
+          {/* --- Loading State --- */}
+          {isLoadingComments && (
+            <div className="flex items-center justify-center py-3 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading
+              comments...
+            </div>
+          )}
+
+          {/* --- Error State --- */}
+          {!isLoadingComments && commentsError && (
+            <div className="text-center py-3 text-xs text-red-600 dark:text-red-400">
+              Error: {commentsError}
+              <Button
+                variant="link"
+                size="sm"
+                onClick={fetchComments}
+                className="ml-2 h-auto p-0 text-xs"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {/* --- Comments List --- */}
+          {!isLoadingComments && !commentsError && comments.length > 0 && (
+            <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
               {comments.map((comment) => (
                 <div
                   key={comment.id}
-                  className="text-xs flex gap-1.5 items-start"
+                  className="text-xs flex gap-2 items-start"
                 >
+                  {/* Comment Author Avatar */}
                   <Avatar className="h-5 w-5 mt-0.5 flex-shrink-0">
-                    {/* <AvatarImage src={comment.author.image} /> */}
+                    <AvatarImage
+                      src={comment.author?.image || undefined}
+                      alt={comment.author?.name || "User"}
+                    />
                     <AvatarFallback className="text-[10px]">
                       {comment.author?.name?.charAt(0)?.toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <span className="font-medium text-foreground mr-1">
-                      {comment.author?.name || "Anon"}
-                    </span>
+                  {/* Comment Content & Meta */}
+                  <div className="flex-grow">
+                    <Link
+                      href={`/app/profile/${comment.author?.id}`}
+                      className="font-medium text-foreground hover:underline mr-1.5"
+                    >
+                      {comment.author?.name || "Anonymous"}
+                    </Link>
                     <span className="text-foreground/90">
                       {comment.content}
                     </span>
-                    {/* <span className="text-muted-foreground/70 ml-1.5 text-[10px]">({formatShortTime(new Date(comment.createdAt))})</span> */}
+                    <span className="text-muted-foreground/70 ml-2 text-[10px] whitespace-nowrap">
+                      • {formatShortTime(new Date(comment.createdAt))}
+                    </span>
+                    {/* Optional: Add Edit/Delete buttons here based on currentUserId === comment.author?.id */}
                   </div>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground mb-3 italic">
+          )}
+
+          {/* --- Empty State --- */}
+          {!isLoadingComments && !commentsError && comments.length === 0 && (
+            <p className="text-xs text-muted-foreground mb-4 italic">
               No comments yet.
             </p>
           )}
 
-          {/* Add Comment Form */}
-          {currentUserId && (
+          {/* --- Add Comment Form --- */}
+          {currentUserId && ( // Only show form if logged in
             <form
               onSubmit={handlePostComment}
-              className="flex gap-2 items-start"
+              className="flex gap-2 items-start mt-2 pt-2 border-t border-border/30"
             >
               <Avatar className="h-6 w-6 mt-0.5 flex-shrink-0">
-                {/* Current user avatar */}
+                {/* You might want to fetch/pass currentUser image here */}
                 <AvatarFallback className="text-xs">
                   <UserIcon size={12} />
                 </AvatarFallback>
               </Avatar>
               <Textarea
                 placeholder="Add a comment..."
-                rows={1} // Start with 1 row
+                rows={1}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                className="flex-grow text-xs min-h-[28px] resize-none" // Minimal height, no resize handle
+                className="flex-grow text-xs min-h-[28px] resize-none bg-background" // Ensure bg for contrast
+                disabled={isPostingComment}
               />
               <Button
                 type="submit"
                 size="sm"
                 disabled={isPostingComment || !commentText.trim()}
-                className="h-7 self-end"
+                className="h-7 px-2.5 self-end" // Align button, adjust padding
+                aria-label="Post comment"
               >
-                {" "}
-                {/* Align button */}
-                {isPostingComment ? "..." : "Post"}
+                {isPostingComment ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" /> // Use Send icon
+                )}
               </Button>
             </form>
           )}
+          {!currentUserId &&
+            !isLoadingComments &&
+            !commentsError && ( // Prompt to login if comments are loaded
+              <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border/30">
+                Please{" "}
+                <Link
+                  href="/api/auth/signin"
+                  className="text-primary hover:underline"
+                >
+                  sign in
+                </Link>{" "}
+                to comment.
+              </p>
+            )}
         </div>
       )}
+      {/* ================= END COMMENT SECTION ================= */}
     </Card> // End of main AnswerItem Card
   );
 
