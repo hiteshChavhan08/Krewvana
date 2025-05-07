@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth"; // Corrected import path
 import prisma from "@/lib/prisma";
 import { LearningResourceCreateSchema } from "@/lib/schemas";
 import { ZodError } from "zod";
+import { awardPoints } from "@/lib/points";
+import { PointLogType } from "@prisma/client";
 
 // GET: Fetch all learning resources with pagination
 export async function GET(request: Request) {
@@ -75,7 +77,17 @@ export async function POST(request: Request) {
         submittedBy: { select: { name: true, image: true, id: true } },
       },
     });
-    // TODO: Award points for submission (e.g., create a PointEarning activity)
+    if (newResource) {
+      await awardPoints({
+        userId: userId,
+        actionType: PointLogType.RESOURCE_SUBMITTED, // Use/add this enum member
+        reason: `Shared learning resource: "${newResource.title.substring(
+          0,
+          50
+        )}${newResource.title.length > 50 ? "..." : ""}"`,
+        relatedResourceId: newResource.id, // If you add resourceId to PointLog
+      });
+    }
     return NextResponse.json(newResource, { status: 201 });
   } catch (error) {
     if (error instanceof ZodError) {

@@ -63,6 +63,7 @@ enum VoteType {
 enum PointLogType {
   KUDOS_GIVEN
   KUDOS_RECEIVED
+  QUESTION_POSTED
   ANSWER_POSTED
   ANSWER_ACCEPTED_AUTHOR
   ANSWER_ACCEPTED_SELECTOR
@@ -74,6 +75,7 @@ enum PointLogType {
   MENTORSHIP_COMPLETED_MENTEE
   BADGE_EARNED
   IDEA_SUBMITTED
+  IDEA_VOTE_RECEIVED
   RESOURCE_SUBMITTED
   OTHER
   // COMMENT_POSTED // Optional: Add if commenting grants points
@@ -595,9 +597,12 @@ model PointLog {
   relatedVoteId String? // Non-unique: Multiple logs might relate to votes (giving/receiving)
   relatedVote   Vote?   @relation("PointsForVote", fields: [relatedVoteId], references: [id], onDelete: SetNull)
 
-  badgeId String?
-  badge   Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
-
+  badgeId            String?
+  badge              Badge?            @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+  ideaId             String?
+  idea               Idea?             @relation(fields: [ideaId], references: [id], onDelete: SetNull) // Assuming you name the Idea model 'Idea'
+  learningResourceId String?
+  learningResource   LearningResource? @relation(fields: [learningResourceId], references: [id], onDelete: SetNull)
   // Note: Removed Vote[] relation from here as it was redundant with relatedVoteId/relatedVote
 
   // Indexes
@@ -609,6 +614,8 @@ model PointLog {
   @@index([acceptedAnswerId])
   @@index([badgeId])
   @@index([kudosId])
+  @@index([ideaId])
+  @@index([learningResourceId])
 }
 
 model LearningResource {
@@ -622,6 +629,7 @@ model LearningResource {
   submittedBy   User   @relation("SubmittedByUser", fields: [submittedById], references: [id], onDelete: Cascade)
 
   // pointLog PointLog? // Optional: Link if submitting grants points
+  PointLog PointLog[]
 
   // Indexes
   @@index([submittedAt])
@@ -744,6 +752,7 @@ model Idea {
   votes         IdeaVote[] @relation("IdeaVotes")
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+  PointLog      PointLog[]
 }
 
 model IdeaVote {

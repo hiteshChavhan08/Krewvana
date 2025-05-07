@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { IdeaCreateSchema } from "@/lib/schemas";
 import { ZodError } from "zod";
+import { awardPoints } from "@/lib/points";
+import { PointLogType } from "@prisma/client";
 
 // GET: Fetch all ideas (with pagination and sorting by votes/date)
 export async function GET(request: Request) {
@@ -82,7 +84,10 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    console.log('[API POST /api/ideas] Received JSON body:', JSON.stringify(json, null, 2)); 
+    console.log(
+      "[API POST /api/ideas] Received JSON body:",
+      JSON.stringify(json, null, 2)
+    );
     const data = IdeaCreateSchema.parse(json);
 
     const newIdea = await prisma.idea.create({
@@ -99,9 +104,16 @@ export async function POST(request: Request) {
       },
     });
 
-    // TODO: Award points for submitting an idea (if points system is integrated)
-    // e.g., await awardPoints(userId, 'SUBMIT_IDEA', 10);
-
+    if (newIdea) {
+      await awardPoints({
+        userId: userId,
+        actionType: PointLogType.IDEA_SUBMITTED, // Use your enum member
+        reason: `Submitted idea: "${newIdea.title.substring(0, 50)}${
+          newIdea.title.length > 50 ? "..." : ""
+        }"`,
+        relatedIdeaId: newIdea.id, // If you add ideaId to PointLog
+      });
+    }
     return NextResponse.json(
       {
         ...newIdea,
