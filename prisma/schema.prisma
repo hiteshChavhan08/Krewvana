@@ -197,6 +197,8 @@ model User {
   answers                    Answer[]                 @relation("AnswerAuthor")
   votes                      Vote[]                   @relation("Voter")
   comments                   Comment[]                @relation("CommentAuthor") // Comments written by this user
+  ideasSubmitted             Idea[]                   @relation("UserIdeas")
+  ideaVotes                  IdeaVote[]               @relation("UserIdeaVotes")
 
   // Indexes
   @@index([points])
@@ -729,4 +731,37 @@ model Notification {
 
   // Indexes
   @@index([userId, isRead, createdAt(sort: Desc)]) // Optimize fetching unread notifications for a user
+}
+
+model Idea {
+  id            String     @id @default(cuid())
+  title         String
+  description   String     @db.Text
+  category      String[]   @default([])
+  status        IdeaStatus @default(SUBMITTED) // For potential workflow
+  submittedById String
+  submittedBy   User       @relation("UserIdeas", fields: [submittedById], references: [id])
+  votes         IdeaVote[] @relation("IdeaVotes")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model IdeaVote {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserIdeaVotes", fields: [userId], references: [id])
+  ideaId String
+  idea   Idea   @relation("IdeaVotes", fields: [ideaId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, ideaId]) // A user can vote for an idea only once
+}
+
+enum IdeaStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  IMPLEMENTED
+  REJECTED
 }

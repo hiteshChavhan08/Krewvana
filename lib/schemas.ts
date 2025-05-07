@@ -111,3 +111,30 @@ export const ClientProfileUpdateSchema = z
       .or(z.literal("")),
   })
   .strict(); // Prevent extra fields
+
+// --- Schemas for Idea Wall ---
+export const IdeaCreateSchema = z.object({
+  title: z
+    .string()
+    .min(5, "Title must be at least 5 characters")
+    .max(150, "Title must be 150 characters or less"),
+  description: z
+    .string()
+    .min(20, "Description must be at least 20 characters")
+    .max(2000, "Description must be 2000 characters or less"),
+  // category: z.string().max(50, "Category is too long").optional().nullable(), // OLD
+  category: z
+    .array(
+      z
+        .string()
+        .min(1, "Tag cannot be empty")
+        .max(25, "Tag cannot be longer than 25 characters") // Max length for individual tag
+        .regex(
+          /^[a-zA-Z0-9\s-]+$/,
+          "Tag can only contain letters, numbers, spaces, and hyphens"
+        ) // Optional: restrict characters
+    )
+    .max(5, "You can add up to 5 categories/tags.") // Max number of tags
+    .optional(), // The whole array is optional
+});
+export type IdeaCreateData = z.infer<typeof IdeaCreateSchema>;
