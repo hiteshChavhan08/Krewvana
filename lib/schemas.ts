@@ -1,5 +1,5 @@
 // lib/schemas.ts
-import { IdeaStatus, ShoutoutType, UserRole } from "@prisma/client"; // Added UserRole assuming it might be needed
+import { IdeaStatus, ShoutoutType, UserRole } from "@prisma/client";
 import { z } from "zod";
 
 // --- General Purpose Schemas ---
@@ -38,14 +38,12 @@ export const LearningResourceCreateSchema = z.object({
     .string()
     .max(1000, "Description too long")
     .optional()
-    .or(z.literal("")), // Allow empty string or optional
+    .or(z.literal("")),
 });
 export type LearningResourceCreateData = z.infer<
   typeof LearningResourceCreateSchema
 >;
 
-// Note: You had an "InnovationIdeaCreateSchema". If this is different from the main "IdeaCreateSchema", keep it.
-// If it's the same feature, you might consolidate. For now, I'll assume it's distinct.
 export const InnovationIdeaCreateSchema = z.object({
   title: z
     .string()
@@ -95,7 +93,7 @@ export const UserSignupSchema = z
 
 export const ClientProfileUpdateSchema = z
   .object({
-    name: z.string().min(1, "Name cannot be empty").max(100).trim().optional(), // Made name optional for partial updates
+    name: z.string().min(1, "Name cannot be empty").max(100).trim().optional(),
     hobbies: z
       .string()
       .max(500, "Hobbies text too long")
@@ -114,14 +112,11 @@ export const ClientProfileUpdateSchema = z
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {
-    // Ensure at least one field is provided for update
     message: "At least one field must be provided to update the profile.",
   });
 export type ClientProfileUpdateData = z.infer<typeof ClientProfileUpdateSchema>;
 
 // --- Schemas for Idea Wall API ---
-
-// API: Schema for creating an idea
 export const IdeaCreateAPISchema = z.object({
   title: z
     .string()
@@ -132,14 +127,13 @@ export const IdeaCreateAPISchema = z.object({
     .min(20, "Description must be at least 20 characters")
     .max(2000, "Description must be 2000 characters or less"),
   category: z
-    .array(TagSchema) // Use the refined TagSchema
+    .array(TagSchema)
     .max(5, "You can add up to 5 categories/tags.")
     .optional()
-    .default([]), // Default to empty array if not provided
+    .default([]),
 });
 export type IdeaCreateAPIData = z.infer<typeof IdeaCreateAPISchema>;
 
-// API: Schema for updating an idea
 export const IdeaUpdateAPISchema = z
   .object({
     title: z
@@ -156,7 +150,7 @@ export const IdeaUpdateAPISchema = z
       .array(TagSchema)
       .max(5, "You can add up to 5 categories.")
       .optional(),
-    status: z.nativeEnum(IdeaStatus).optional(), // For admin to update status
+    status: z.nativeEnum(IdeaStatus).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided for an update.",
@@ -181,37 +175,29 @@ export const IdeaCommentsQuerySchema = z.object({
 export type IdeaCommentsQueryData = z.infer<typeof IdeaCommentsQuerySchema>;
 
 // --- Schemas Specifically for the Reusable Idea FORM Component ---
-
-// 1. Defines the shape of all fields the form UI can manage.
-//    Title and Description are required here as a base for form validation.
 const IdeaFormFieldShapeSchema = z.object({
   title: z
     .string()
     .min(1, "Title is required.")
-    .max(150, "Title cannot exceed 150 characters."), // Min 1 for required check
+    .max(150, "Title cannot exceed 150 characters."),
   description: z
     .string()
     .min(1, "Description is required.")
-    .max(5000, "Description cannot exceed 5000 characters."), // Min 1 for required
+    .max(5000, "Description cannot exceed 5000 characters."),
   category: z
     .array(TagSchema)
     .max(5, "You can add up to 5 categories.")
     .optional()
     .default([]),
-  status: z.nativeEnum(IdeaStatus).optional(), // Status is optional in the form UI itself (only for admin edits)
+  status: z.nativeEnum(IdeaStatus).optional(),
 });
 
-// 2. Unified Form Data Type for useForm<T> (all fields optional for form's internal state)
-//    This allows react-hook-form to manage fields that might be initially empty or cleared.
 const PartialIdeaFormFieldSchema = IdeaFormFieldShapeSchema.partial();
 export type IdeaUnifiedFormData = z.infer<typeof PartialIdeaFormFieldSchema>;
-// Alternative inference: export type IdeaUnifiedFormData = z.input<typeof IdeaFormFieldShapeSchema.partial>;
 
-// 3. Validation Schema passed to zodResolver when CREATING an idea via the form.
 export const IdeaFormCreateValidationSchema = IdeaFormFieldShapeSchema.omit({
   status: true,
-}) // Users don't set status on create.
-  // Additional refinements if the base min(1) isn't enough (e.g. more specific length for create)
+})
   .refine((data) => data.title.trim().length >= 5, {
     message: "Title must be at least 5 characters.",
     path: ["title"],
@@ -224,9 +210,7 @@ export type IdeaFormCreateValidationData = z.infer<
   typeof IdeaFormCreateValidationSchema
 >;
 
-// 4. Validation Schema passed to zodResolver when UPDATING an idea via the form.
-//    This makes all fields optional for the update payload but ensures at least one is provided.
-export const IdeaFormUpdateValidationSchema = IdeaFormFieldShapeSchema.partial() // Makes all fields optional for the update
+export const IdeaFormUpdateValidationSchema = IdeaFormFieldShapeSchema.partial()
   .refine(
     (data) =>
       Object.values(data).some(
@@ -239,7 +223,6 @@ export const IdeaFormUpdateValidationSchema = IdeaFormFieldShapeSchema.partial()
         "At least one field must be provided with a meaningful value for an update.",
     }
   )
-  // Add specific min length checks for fields if they are provided for update
   .refine((data) => data.title === undefined || data.title.trim().length >= 5, {
     message: "Title must be at least 5 characters if provided.",
     path: ["title"],
@@ -255,5 +238,3 @@ export const IdeaFormUpdateValidationSchema = IdeaFormFieldShapeSchema.partial()
 export type IdeaFormUpdateValidationData = z.infer<
   typeof IdeaFormUpdateValidationSchema
 >;
-
-// --- End Schemas for Idea Wall ---

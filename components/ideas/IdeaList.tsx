@@ -122,7 +122,7 @@ export function IdeaList({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {ideas.map((idea) => (
                   // --- WRAP IdeaCard with Link ---
-                  <Link key={idea.id} href={`/app/ideas/${idea.id}`} passHref legacyBehavior={false} className="block h-full">
+                  <Link key={idea.id} href={`/app/ideas/${idea.id}`} passHref className="block h-full">
                     {/* passHref is useful if IdeaCard's root element isn't an <a> tag itself.
                         legacyBehavior={false} is the default in newer Next.js but good to be explicit.
                         Added className="block h-full" to make the link take up the full card space.

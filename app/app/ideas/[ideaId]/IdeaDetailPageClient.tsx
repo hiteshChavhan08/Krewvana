@@ -1,7 +1,7 @@
 // app/app/ideas/[ideaId]/IdeaDetailPageClient.tsx
 "use client";
 import React, { useState } from "react";
-import { useDeleteIdea, useIdea, useUpdateIdea } from "@/hooks/ideas/useIdeas"; // Adjust path
+import { useDeleteIdea, useIdea, useUpdateIdea } from "@/hooks/ideas/useIdeas";
 import { IdeaCommentList } from "@/components/ideas/IdeaCommentList";
 import { IdeaCommentForm } from "@/components/ideas/IdeaCommentForm";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,13 +23,13 @@ import { useVoteIdea } from "@/hooks/ideas/useVoteIdea";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { BackgroundGradient } from "@/components/ui/background-gradient"; // Optional
+import { BackgroundGradient } from "@/components/ui/background-gradient";
 import { UserRole } from "@prisma/client";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation"; // <--- CORRECTED IMPORT
 import {
-  IdeaFormUpdateValidationData,
-  IdeaFormUpdateValidationSchema,
-  IdeaUpdateAPIData,
+  IdeaFormUpdateValidationData, // This is good if IdeaForm's onSubmissionComplete provides this type
+  IdeaUpdateAPIData, // This is what your API expects for update
+  IdeaUnifiedFormData // This is what IdeaForm uses internally for useForm<T>
 } from "@/lib/schemas";
 import {
   Dialog,
@@ -40,7 +40,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { IdeaForm } from "@/components/ideas/IdeaForm";
-
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -72,22 +71,23 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
     isLoading,
     isError,
     error,
-    refetch: refetchIdea,
+    // refetch: refetchIdea, // refetch from useIdea if needed after mutation
   } = useIdea(ideaId);
   const currentUser = useCurrentUser();
   const voteMutation = useVoteIdea();
   const updateIdeaMutation = useUpdateIdea();
   const deleteIdeaMutation = useDeleteIdea();
-  const router = useRouter();
+  const router = useRouter(); // Now correctly imported for App Router
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
   const handleVote = () => {
     if (!currentUser || !idea) {
-      // toastError("Please log in to vote."); // Handled by button disabled state
       return;
     }
     voteMutation.mutate(idea.id);
   };
+
   const isAuthor = currentUser && idea && currentUser.id === idea.submittedById;
   const isAdmin = currentUser && currentUser.role === UserRole.ADMIN;
   const canModify = isAuthor || isAdmin;
@@ -96,21 +96,43 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
     if (!idea) return;
     deleteIdeaMutation.mutate(idea.id, {
       onSuccess: () => {
-        router.push("/app/ideas"); // Redirect to ideas list after delete
+        // Ensure the path is correct for your routing structure
+        router.push('/app/ideas'); // Or just '/ideas' if /app isn't part of URL path
       },
+      // onError: (err) => { /* handle delete error */ }
     });
   };
 
-  const handleEditSubmit = (formData: IdeaFormUpdateValidationData) => {
-    //formData should be IdeaUpdateData
+  // The data from IdeaForm (onSubmissionComplete) should be Partial<IdeaUnifiedFormData>
+  // We then map it to IdeaUpdateAPIData before sending to the mutation
+  const handleEditSubmit = (formDataFromForm: Partial<IdeaUnifiedFormData>) => {
     if (!idea) return;
+
+    // Construct the payload for the API (IdeaUpdateAPIData)
+    // Only include fields that were actually part of the form and potentially changed.
+    // IdeaUpdateAPIData from schema makes fields optional.
+    const apiPayload: IdeaUpdateAPIData = {};
+    if (formDataFromForm.title !== undefined) apiPayload.title = formDataFromForm.title;
+    if (formDataFromForm.description !== undefined) apiPayload.description = formDataFromForm.description;
+    if (formDataFromForm.category !== undefined) apiPayload.category = formDataFromForm.category;
+    if (isAdmin && formDataFromForm.status !== undefined) apiPayload.status = formDataFromForm.status;
+
+
+    // Ensure at least one field is being sent if your API requires it (IdeaUpdateAPISchema has a refine for this)
+    if (Object.keys(apiPayload).length === 0) {
+        // toastError("No changes to save."); // Or some user feedback
+        setIsEditDialogOpen(false);
+        return;
+    }
+
     updateIdeaMutation.mutate(
-      { ideaId: idea.id, data: formData },
+      { ideaId: idea.id, data: apiPayload }, // Pass the correctly typed API payload
       {
         onSuccess: () => {
           setIsEditDialogOpen(false);
-          // refetchIdea(); // Or rely on onSuccess invalidation in useUpdateIdea
+          // Invalidation is handled by useUpdateIdea hook's onSuccess
         },
+        // onError: (err) => { /* handle update error */ }
       }
     );
   };
@@ -118,18 +140,17 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-3xl py-8 px-4 space-y-6">
-        <Skeleton className="h-8 w-3/4 mb-2" /> {/* Title */}
-        <Skeleton className="h-6 w-1/2 mb-4" /> {/* Submitted by */}
+        <Skeleton className="h-8 w-3/4 mb-2" />
+        <Skeleton className="h-6 w-1/2 mb-4" />
         <div className="flex space-x-2 mb-4">
-          <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-20" />{" "}
-          {/* Badges */}
+          <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-20" />
         </div>
-        <Skeleton className="h-32 w-full mb-6" /> {/* Description */}
-        <Skeleton className="h-10 w-32 mb-6" /> {/* Vote button */}
+        <Skeleton className="h-32 w-full mb-6" />
+        <Skeleton className="h-10 w-32 mb-6" />
         <hr />
-        <Skeleton className="h-8 w-1/3 mt-6 mb-4" /> {/* Comments title */}
-        <Skeleton className="h-20 w-full mb-4" /> {/* Comment form */}
-        <Skeleton className="h-16 w-full" /> {/* Comment item */}
+        <Skeleton className="h-8 w-1/3 mt-6 mb-4" />
+        <Skeleton className="h-20 w-full mb-4" />
+        <Skeleton className="h-16 w-full" />
       </div>
     );
   }
@@ -145,7 +166,7 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
           </AlertDescription>
         </Alert>
         <Button variant="outline" asChild className="mt-6">
-          <Link href="/ideas">
+          <Link href="/app/ideas"> {/* Or just /ideas */}
             <ChevronLeft className="mr-2 h-4 w-4" /> Back to Ideas
           </Link>
         </Button>
@@ -161,22 +182,21 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
         asChild
         className="mb-6 -ml-3 text-muted-foreground hover:text-primary"
       >
-        <Link href="/app/ideas">
+        <Link href="/app/ideas"> {/* Or just /ideas */}
           <ChevronLeft className="mr-1 h-4 w-4" /> Back to All Ideas
         </Link>
       </Button>
 
       <article className="space-y-6">
-        <header className="space-y-2">
-          {canModify && (
-            <div className="absolute top-0 right-0">
-              {/* Simple buttons or a DropdownMenu for more actions */}
+        <header className="space-y-2 relative"> {/* Added relative for positioning edit/delete */}
+           {canModify && (
+            <div className="absolute top-0 right-0 flex space-x-2">
               <Dialog
                 open={isEditDialogOpen}
                 onOpenChange={setIsEditDialogOpen}
               >
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="icon" className="mr-2">
+                  <Button variant="outline" size="icon" className="h-8 w-8"> {/* Smaller icon button */}
                     <Edit3 className="h-4 w-4" />
                     <span className="sr-only">Edit Idea</span>
                   </Button>
@@ -188,21 +208,17 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
                       Make changes to your idea details.
                     </DialogDescription>
                   </DialogHeader>
-                  {/* You'll need an IdeaEditForm component here */}
-                  {/* For now, a placeholder. Adapt IdeaForm for editing. */}
                   <IdeaForm
-                    existingIdea={idea} // Pass existing idea data to prefill
-                    onSubmissionComplete={(data) => {
-                      handleEditSubmit(data as IdeaUpdateAPIData); // Cast if IdeaForm returns IdeaCreateData
-                    }}
-                    isEditing={true} // Add a prop to IdeaForm to change submit text, etc.
+                    existingIdea={idea}
+                    onSubmissionComplete={handleEditSubmit} // This now expects Partial<IdeaUnifiedFormData>
+                    isEditing={true}
                   />
                 </DialogContent>
               </Dialog>
 
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="icon">
+                  <Button variant="destructive" size="icon" className="h-8 w-8"> {/* Smaller icon button */}
                     <Trash2 className="h-4 w-4" />
                     <span className="sr-only">Delete Idea</span>
                   </Button>
@@ -224,7 +240,7 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
                     <AlertDialogAction
                       onClick={handleDelete}
                       disabled={deleteIdeaMutation.isPending}
-                      className="bg-destructive hover:bg-destructive/90"
+                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                     >
                       {deleteIdeaMutation.isPending
                         ? "Deleting..."
@@ -235,15 +251,16 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
               </AlertDialog>
             </div>
           )}
-          {/* {idea.category && idea.category.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
+          {/* Categories should be displayed. Uncomment if data is available */}
+          {idea.category && idea.category.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3 pt-1"> {/* Added pt-1 if edit/delete buttons are present */}
               {idea.category.map((cat: string) => (
                 <Badge key={cat} variant="secondary">
                   {cat}
                 </Badge>
               ))}
             </div>
-          )} */}
+          )}
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Zap className="h-7 w-7 text-yellow-500" /> {idea.title}
           </h1>
@@ -274,8 +291,6 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
           animate={false}
         >
           <div className="p-6 bg-card rounded-[20px]">
-            {" "}
-            {/* Card-like bg for description */}
             <p className="text-base md:text-lg leading-relaxed whitespace-pre-wrap">
               {idea.description}
             </p>
@@ -307,11 +322,10 @@ export function IdeaDetailPageClient({ ideaId }: IdeaDetailPageClientProps) {
             <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
               <MessageSquare className="h-4 w-4" />
               <span>
-                {idea.commentCount} Comment{idea.commentCount !== 1 ? "s" : ""}
+                {idea.commentCount ?? 0} Comment{(idea.commentCount ?? 0) !== 1 ? "s" : ""}
               </span>
             </div>
           </div>
-          {/* Add Edit/Delete buttons for idea author here later */}
         </div>
       </article>
 

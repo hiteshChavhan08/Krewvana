@@ -3,7 +3,7 @@
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { IdeaCommentCreateSchema, IdeaCommentCreateData } from "@/lib/schemas"; // Adjust path
+import { IdeaCommentCreateSchema, IdeaCommentCreateData } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -13,16 +13,20 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { useSubmitIdeaComment } from "@/hooks/ideas/useIdeaComments"; // Adjust path
+import { useSubmitIdeaComment } from "@/hooks/ideas/useIdeaComments";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { SendHorizonal, Loader2 } from "lucide-react";
+import Link from "next/link";
 
 interface IdeaCommentFormProps {
   ideaId: string;
-  onCommentSubmitted?: () => void; // Callback after submission
+  onCommentSubmitted?: () => void;
 }
 
-export function IdeaCommentForm({ ideaId, onCommentSubmitted }: IdeaCommentFormProps) {
+export function IdeaCommentForm({
+  ideaId,
+  onCommentSubmitted,
+}: IdeaCommentFormProps) {
   const currentUser = useCurrentUser();
   const form = useForm<IdeaCommentCreateData>({
     resolver: zodResolver(IdeaCommentCreateSchema),
@@ -35,7 +39,6 @@ export function IdeaCommentForm({ ideaId, onCommentSubmitted }: IdeaCommentFormP
 
   const onSubmit = (data: IdeaCommentCreateData) => {
     if (!currentUser) {
-      // This should ideally be handled by disabling the form if not logged in
       console.error("User not logged in, cannot comment.");
       return;
     }
@@ -50,7 +53,11 @@ export function IdeaCommentForm({ ideaId, onCommentSubmitted }: IdeaCommentFormP
   if (!currentUser) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        Please <a href="/api/auth/signin" className="underline">log in</a> to post a comment.
+        Please{" "}
+        <Link href="/auth/signin" className="underline hover:text-primary">
+          log in
+        </Link>{" "}
+        to post a comment.
       </p>
     );
   }
@@ -76,7 +83,15 @@ export function IdeaCommentForm({ ideaId, onCommentSubmitted }: IdeaCommentFormP
           )}
         />
         <div className="flex justify-end">
-          <Button type="submit" disabled={mutation.isPending || !form.formState.isValid || !form.getValues("content")?.trim()} size="sm">
+          <Button
+            type="submit"
+            disabled={
+              mutation.isPending ||
+              !form.formState.isValid ||
+              !form.getValues("content")?.trim()
+            }
+            size="sm"
+          >
             {mutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
