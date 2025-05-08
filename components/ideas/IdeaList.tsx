@@ -1,13 +1,14 @@
 // components/ideas/IdeaList.tsx
 'use client';
 import React from 'react';
+import Link from 'next/link'; // <--- IMPORT Link from Next.js
 import { IdeaCard } from './IdeaCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Info, Terminal, Loader2, ListFilter, ArrowDownUp } from 'lucide-react';
-import { AnimatedList } from '@/components/magicui/animated-list';
-import { Idea } from '@/hooks/ideas/useIdeas';
+import { AnimatedList } from '@/components/magicui/animated-list'; // Assuming this is correctly imported
+import { Idea } from '@/hooks/ideas/useIdeas'; // Your Idea type
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +16,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 
 interface IdeaListProps {
   ideas: Idea[];
@@ -49,6 +50,7 @@ export function IdeaList({
   ] as const;
 
   if (isLoading && !ideas.length) {
+    // ... (skeleton UI remains the same)
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[...Array(3)].map((_, i) => (
@@ -65,6 +67,7 @@ export function IdeaList({
   }
 
   if (isError) {
+    // ... (error UI remains the same)
     return (
       <Alert variant="destructive" className="max-w-xl mx-auto">
         <Terminal className="h-4 w-4" />
@@ -74,8 +77,9 @@ export function IdeaList({
     );
   }
 
-  if (!isLoading && !ideas.length && !hasNextPage) { // Ensure it's not just loading the first page
-    return (
+  if (!isLoading && !ideas.length && !hasNextPage) {
+    // ... (no ideas UI remains the same)
+     return (
       <Alert className="max-w-xl mx-auto text-center py-10">
         <Info className="h-6 w-6 mx-auto mb-2" />
         <AlertTitle className="text-xl font-semibold">No Ideas Pitched Yet!</AlertTitle>
@@ -111,10 +115,21 @@ export function IdeaList({
             </DropdownMenu>
         </div>
 
-        <AnimatedList delay={100}>
+        {/* Ensure AnimatedList does not interfere with Link behavior. 
+            If AnimatedList renders complex DOM that breaks anchor tags, you might need to adjust.
+            Typically, it should be fine. */}
+        <AnimatedList delay={100}> {/* Assuming AnimatedList renders its children directly or within a simple wrapper */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {ideas.map((idea) => (
-                    <IdeaCard key={idea.id} idea={idea} />
+                  // --- WRAP IdeaCard with Link ---
+                  <Link key={idea.id} href={`/app/ideas/${idea.id}`} passHref legacyBehavior={false} className="block h-full">
+                    {/* passHref is useful if IdeaCard's root element isn't an <a> tag itself.
+                        legacyBehavior={false} is the default in newer Next.js but good to be explicit.
+                        Added className="block h-full" to make the link take up the full card space.
+                        IdeaCard itself should be structured to fill this space.
+                    */}
+                    <IdeaCard idea={idea} />
+                  </Link>
                 ))}
             </div>
         </AnimatedList>

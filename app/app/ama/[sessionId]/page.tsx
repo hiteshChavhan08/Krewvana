@@ -11,7 +11,7 @@ export default async function AMASessionDetailPage({
 }: {
   params: { sessionId: string };
 }) {
-  const { sessionId } = params;
+  const { sessionId } = await params;
   if (!sessionId) notFound();
 
   const [sessionResult, currentUserResult] = await Promise.allSettled([
@@ -40,8 +40,8 @@ export default async function AMASessionDetailPage({
 
   const currentUserData: CurrentUserData = {
       id: fullCurrentUser.id,
-      name: fullCurrentUser.name,
-      image: fullCurrentUser.image,
+      name: fullCurrentUser.name ?? null,
+      image: fullCurrentUser.image ?? null,
       role: fullCurrentUser.role,
   };
 

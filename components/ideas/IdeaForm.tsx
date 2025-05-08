@@ -1,12 +1,16 @@
 // components/ideas/IdeaForm.tsx
 "use client";
-import React from "react";
+import React, { useEffect } from "react"; // Added useEffect
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { IdeaCreateSchema, IdeaCreateData } from "@/lib/schemas";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+// Import both schemas if the form handles create and update based on a prop
+import {
+  IdeaUnifiedFormData, // For useForm<T>
+  IdeaFormCreateValidationSchema, // For resolver on create
+  IdeaFormUpdateValidationSchema,
+} from "@/lib/schemas";
+// ... (other imports: Button, Input, Textarea, Form components, TagInput)
+import { IdeaDetail } from "@/hooks/ideas/useIdeas"; // For existingIdea prop
 import {
   Form,
   FormControl,
@@ -16,63 +20,93 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { useSubmitIdea } from "@/hooks/ideas/useSubmitIdea";
+import { Button } from "react-day-picker";
+import { Input } from "../plate-ui/input";
 import { TagInput } from "../qna/tag-input";
-// Potentially add Select for category if you want predefined categories
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "../ui/textarea";
 
 interface IdeaFormProps {
-  onSubmissionComplete?: () => void;
-  // Example categories, you might fetch these or define them elsewhere
-  //   categories?: string[];
+  // Callback now receives data matching the validation schema used
+  onSubmissionComplete: (data: Partial<IdeaUnifiedFormData>) => void;
+  existingIdea?: IdeaDetail | null;
+  isEditing?: boolean;
 }
 
-export function IdeaForm({ onSubmissionComplete }: IdeaFormProps) {
-  const form = useForm<IdeaCreateData>({
-    resolver: zodResolver(IdeaCreateSchema),
+export function IdeaForm({
+  onSubmissionComplete,
+  existingIdea,
+  isEditing = false,
+}: IdeaFormProps) {
+  const formSchemaForValidation = isEditing
+    ? IdeaFormUpdateValidationSchema
+    : IdeaFormCreateValidationSchema;
+
+  const form = useForm<IdeaUnifiedFormData>({
+    // Use the unified, all-optional type for form state
+    resolver: zodResolver(formSchemaForValidation), // Resolver uses the specific schema
     defaultValues: {
-      title: "",
-      description: "",
-      category: [],
+      // Default values should match IdeaUnifiedFormData (all optional)
+      title: existingIdea?.title || "",
+      description: existingIdea?.description || "",
+      category: existingIdea?.category || [],
+      // status: existingIdea?.status,
     },
   });
 
-  const mutation = useSubmitIdea();
+  useEffect(() => {
+    if (isEditing && existingIdea) {
+      form.reset({
+        // Values here should match IdeaUnifiedFormData
+        title: existingIdea.title,
+        description: existingIdea.description,
+        category: existingIdea.category || [],
+        // status: existingIdea.status,
+      });
+    } else if (!isEditing) {
+      form.reset({
+        title: "",
+        description: "",
+        category: [],
+        status: undefined,
+      });
+    }
+  }, [existingIdea, isEditing, form]);
 
-  const onSubmit = (data: IdeaCreateData) => {
-    console.log("[IdeaForm] Raw form data:", JSON.stringify(data, null, 2));
-    const dataToSubmit = { ...data, category: data.category || [] };
-    console.log(
-      "[IdeaForm] Data being sent to API:",
-      JSON.stringify(dataToSubmit, null, 2)
-    ); // <<< ADD THIS LOG
-    mutation.mutate(dataToSubmit, {
-      onSuccess: () => {
-        form.reset(); // This will reset category back to []
-        onSubmissionComplete?.();
-      },
-    });
+  // The mutation is handled by the parent now. This form just calls onSubmissionComplete.
+  // const mutation = useSubmitIdea(); // Remove this if parent handles mutation
+
+  const onSubmit = (data: IdeaUnifiedFormData) => {
+    onSubmissionComplete(data);
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-2">
+        {/* ... FormFields for title, description, category ... */}
+        {/* Example for Title Field */}
         <FormField
           control={form.control}
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Idea Title</FormLabel>
+              {/* For visual cue, check if it's required in the base shape */}
+              <FormLabel>
+                Idea Title{" "}
+                {!isEditing && <span className="text-destructive">*</span>}
+              </FormLabel>
               <FormControl>
                 <Input
                   placeholder="e.g., Monthly Innovation Challenges"
                   {...field}
+                  value={field.value ?? ""}
                 />
               </FormControl>
-              <FormMessage />
+              <FormMessage />{" "}
+              {/* Will show errors from the active validation schema */}
             </FormItem>
           )}
         />
+        {/* Description Field */}
         <FormField
           control={form.control}
           name="description"
@@ -90,44 +124,45 @@ export function IdeaForm({ onSubmissionComplete }: IdeaFormProps) {
             </FormItem>
           )}
         />
-        {/* --- NEW TagInput for Category --- */}
+        {/* Category/TagInput Field */}
         <FormField
           control={form.control}
-          name="category" // This name must match the one in IdeaCreateData and defaultValues
-          render={(
-            { field } // field contains { onChange, onBlur, value, name, ref }
-          ) => (
+          name="category"
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Categories / Tags (Optional)</FormLabel>
               <FormControl>
                 <TagInput
-                  // Spread the field props from react-hook-form
-                  // This will pass down value, onChange, onBlur, name, ref
                   {...field}
-                  // TagInput expects value: string[] and onChange: (newValue: string[]) => void
-                  // field.value from RHF for an array field will be string[]
-                  // field.onChange from RHF will correctly update the form state with string[]
-                  value={field.value || []} // Ensure value is always an array for TagInput
-                  onChange={field.onChange} // Pass RHF's onChange
+                  value={(field.value as string[] | undefined) || []} // Ensure value is string[]
+                  onChange={field.onChange}
                   placeholder="Add up to 5 tags..."
-                  maxTags={5} // Should match your Zod schema
-                  // You can customize classNames for the TagInput itself or its internal parts
-                  // className="mt-1"
-                  // inputClassName="..."
-                  // badgeClassName="..."
+                  maxTags={5}
                 />
               </FormControl>
               <FormDescription>
-                Press Enter or comma to add a tag. Helps in organizing ideas.
+                Press Enter or comma to add a tag.
               </FormDescription>
-              <FormMessage />{" "}
-              {/* Displays validation errors for the category field */}
+              <FormMessage />
             </FormItem>
           )}
         />
-        {/* --- End TagInput for Category --- */}
-        <Button type="submit" disabled={mutation.isPending} className="w-full">
-          {mutation.isPending ? "Submitting Idea..." : "Pitch My Idea"}
+
+        {/* Optional: Status field for Admins if isEditing and user is Admin */}
+        {/* {isEditing && currentUser?.role === UserRole.ADMIN && ( ... Status Select Field ... )} */}
+
+        <Button
+          type="submit"
+          disabled={form.formState.isSubmitting}
+          className="w-full"
+        >
+          {form.formState.isSubmitting
+            ? isEditing
+              ? "Saving..."
+              : "Submitting..."
+            : isEditing
+            ? "Save Changes"
+            : "Pitch My Idea"}
         </Button>
       </form>
     </Form>

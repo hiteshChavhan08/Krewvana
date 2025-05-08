@@ -77,6 +77,7 @@ enum PointLogType {
   IDEA_SUBMITTED
   IDEA_VOTE_RECEIVED
   RESOURCE_SUBMITTED
+  IDEA_COMMENT_POSTED
   OTHER
   // COMMENT_POSTED // Optional: Add if commenting grants points
 }
@@ -94,6 +95,11 @@ enum NotificationType {
   COMMENT_ON_ANSWER // For new comments
   COMMENT_REPLY // Future: For replies
   COMMENT_MENTION // Future: For mentions
+  IDEA_STATUS_UPDATED // Notify author when their idea status changes
+  IDEA_NEW_COMMENT // Notify idea author (or followers) of a new comment
+  IDEA_VOTE_RECEIVED_AUTHOR // Notify idea author when their idea receives a vote
+  IDEA_COMMENT_MENTION // (Future) If @mentions are added in comments
+  IDEA_COMMENT_REPLY
   OTHER
 }
 
@@ -199,8 +205,11 @@ model User {
   answers                    Answer[]                 @relation("AnswerAuthor")
   votes                      Vote[]                   @relation("Voter")
   comments                   Comment[]                @relation("CommentAuthor") // Comments written by this user
-  ideasSubmitted             Idea[]                   @relation("UserIdeas")
-  ideaVotes                  IdeaVote[]               @relation("UserIdeaVotes")
+
+  ideasSubmitted Idea[]     @relation("UserIdeas")
+  ideaVotes      IdeaVote[] @relation("UserIdeaVotes")
+
+  ideaComments IdeaComment[] @relation("UserIdeaComments")
 
   // Indexes
   @@index([points])
@@ -609,6 +618,9 @@ model PointLog {
   relatedIdeaVoteId  String? // <<< NEW FIELD
   relatedIdeaVote    IdeaVote?         @relation(fields: [relatedIdeaVoteId], references: [id], onDelete: SetNull) // <<< NEW RELATION
 
+  relatedIdeaCommentId String?
+  relatedIdeaComment   IdeaComment? @relation(fields: [relatedIdeaCommentId], references: [id], onDelete: SetNull)
+
   // Indexes
   @@index([userId])
   @@index([timestamp])
@@ -621,6 +633,7 @@ model PointLog {
   @@index([ideaId]) // Add index if you add the field
   @@index([learningResourceId]) // Add index if you add the field
   @@index([relatedIdeaVoteId])
+  @@index([relatedIdeaCommentId])
 }
 
 model LearningResource {
@@ -742,22 +755,33 @@ model Notification {
   commentId String? // Link to the relevant comment
   comment   Comment? @relation("CommentNotifications", fields: [commentId], references: [id], onDelete: Cascade) // Delete notification if source comment deleted
 
-  // Indexes
-  @@index([userId, isRead, createdAt(sort: Desc)]) // Optimize fetching unread notifications for a user
+  ideaId String?
+  idea   Idea?   @relation("NotificationsForIdea", fields: [ideaId], references: [id], onDelete: Cascade)
+
+  ideaCommentId String?
+  ideaComment   IdeaComment? @relation("IdeaCommentNotifications", fields: [ideaCommentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([ideaId]) // Added index for the foreign key
+  @@index([ideaCommentId]) // Added index for the foreign key
 }
 
 model Idea {
-  id            String     @id @default(cuid())
+  id            String         @id @default(cuid())
   title         String
-  description   String     @db.Text
-  category      String[]   @default([])
-  status        IdeaStatus @default(SUBMITTED) // For potential workflow
+  description   String         @db.Text
+  category      String[]       @default([])
+  status        IdeaStatus     @default(SUBMITTED) // For potential workflow
   submittedById String
-  submittedBy   User       @relation("UserIdeas", fields: [submittedById], references: [id])
-  votes         IdeaVote[] @relation("IdeaVotes")
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  submittedBy   User           @relation("UserIdeas", fields: [submittedById], references: [id], onDelete: Cascade)
+  votes         IdeaVote[]     @relation("IdeaVotes")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   PointLog      PointLog[]
+  comments      IdeaComment[]  @relation("IdeaComments")
+  notifications Notification[] @relation("NotificationsForIdea")
+
+  @@index([submittedById])
 }
 
 model IdeaVote {
@@ -765,7 +789,7 @@ model IdeaVote {
   userId String
   user   User   @relation("UserIdeaVotes", fields: [userId], references: [id])
   ideaId String
-  idea   Idea   @relation("IdeaVotes", fields: [ideaId], references: [id])
+  idea   Idea   @relation("IdeaVotes", fields: [ideaId], references: [id], onDelete: Cascade)
 
   createdAt DateTime   @default(now())
   PointLog  PointLog[]
@@ -779,4 +803,33 @@ enum IdeaStatus {
   APPROVED
   IMPLEMENTED
   REJECTED
+}
+
+model IdeaComment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authorId String
+  author   User   @relation("UserIdeaComments", fields: [authorId], references: [id], onDelete: Cascade)
+
+  ideaId String
+  idea   Idea   @relation("IdeaComments", fields: [ideaId], references: [id], onDelete: Cascade)
+
+  // Optional: For nested comments/threading
+  parentId String?
+  parent   IdeaComment?  @relation("IdeaCommentReplies", fields: [parentId], references: [id], onDelete: NoAction) // NoAction to prevent cycles
+  replies  IdeaComment[] @relation("IdeaCommentReplies")
+
+  // Optional: Link to PointLog if posting comments gives points
+  // pointLogs PointLog[] @relation("PointLogForIdeaComment") // If comments grant points
+
+  // Optional: Notifications for replies or mentions
+  notifications Notification[] @relation("IdeaCommentNotifications")
+  PointLog      PointLog[]
+
+  @@index([authorId])
+  @@index([ideaId, createdAt(sort: Desc)]) // For fetching comments for an idea, sorted
+  @@index([parentId]) // If using threaded comments
 }
