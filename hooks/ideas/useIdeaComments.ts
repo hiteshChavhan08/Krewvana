@@ -1,32 +1,20 @@
 // hooks/ideas/useIdeaComments.ts
 import {
-  InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
+  InfiniteData,
 } from "@tanstack/react-query";
-import { IdeaCommentCreateData } from "@/lib/schemas"; // Adjust path if needed
-import { toastSuccess, toastError } from "@/utils/toast"; // Your toast utilities
+import { IdeaCommentCreateData } from "@/lib/schemas";
+import { toastSuccess, toastError } from "@/utils/toast";
+import { IdeaCommentPayload } from "@/types/serviceTypes"; // Use correct type
 
-// Define the structure of a comment as expected from the API
-// This should match the 'include' in your API response
-export interface IdeaCommentAuthor {
-  id: string;
-  name: string | null;
-  image: string | null;
-}
+// Base URL for server-side fetching
+const BASE_URL =
+  process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
 
-export interface IdeaComment {
-  id: string;
-  content: string;
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
-  authorId: string;
-  author: IdeaCommentAuthor;
-  ideaId: string;
-  // replies?: IdeaComment[]; // If you add threaded replies
-  // _count?: { replies: number };
-}
+// --- Type Definitions ---
+export type IdeaComment = IdeaCommentPayload; // Alias
 
 export interface PaginatedIdeaComments {
   data: IdeaComment[];
@@ -38,6 +26,7 @@ export interface PaginatedIdeaComments {
   };
 }
 
+// --- API Fetching Function (Absolute URL) ---
 export const fetchIdeaCommentsAPI = async ({
   ideaId,
   pageParam = 1,
@@ -47,18 +36,24 @@ export const fetchIdeaCommentsAPI = async ({
   pageParam?: number;
   limit?: number;
 }): Promise<PaginatedIdeaComments> => {
-  const response = await fetch(
-    `/api/ideas/${ideaId}/comments?page=${pageParam}&limit=${limit}`
-  );
+  const url = new URL(`${BASE_URL}/api/ideas/${ideaId}/comments`);
+  url.searchParams.set("page", String(pageParam));
+  url.searchParams.set("limit", String(limit));
+  const response = await fetch(url.toString());
   if (!response.ok) {
     const errorData = await response
       .json()
-      .catch(() => ({ error: "Failed to fetch comments" }));
-    throw new Error(errorData.error || "Failed to fetch comments");
+      .catch(() => ({
+        error: `Failed to fetch comments (${response.status})`,
+      }));
+    throw new Error(
+      errorData.error || `Failed to fetch comments (${response.status})`
+    );
   }
-  return response.json();
+  return response.json(); // Expect { data: [], pagination: {} }
 };
 
+// --- React Query Hooks ---
 export function useIdeaComments(ideaId: string, limit: number = 10) {
   return useInfiniteQuery<
     PaginatedIdeaComments,
@@ -70,17 +65,18 @@ export function useIdeaComments(ideaId: string, limit: number = 10) {
     queryKey: ["ideaComments", ideaId] as const,
     queryFn: ({ pageParam }) =>
       fetchIdeaCommentsAPI({ ideaId, pageParam, limit }),
+    initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       if (lastPage.pagination.page < lastPage.pagination.totalPages) {
         return lastPage.pagination.page + 1;
       }
       return undefined;
     },
-    initialPageParam: 1,
-    enabled: !!ideaId, // Only run if ideaId is available
+    enabled: !!ideaId,
   });
 }
 
+// --- Mutation Hook ---
 const submitIdeaCommentAPI = async ({
   ideaId,
   commentData,
@@ -90,48 +86,41 @@ const submitIdeaCommentAPI = async ({
 }): Promise<IdeaComment> => {
   const response = await fetch(`/api/ideas/${ideaId}/comments`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(commentData),
   });
   if (!response.ok) {
     const errorData = await response
       .json()
-      .catch(() => ({ error: "Failed to submit comment" }));
-    throw new Error(errorData.error || "Failed to submit comment");
+      .catch(() => ({ error: `Post comment failed (${response.status})` }));
+    throw new Error(
+      errorData.error || `Post comment failed (${response.status})`
+    );
   }
-  return response.json();
+  return response.json(); // API returns the new IdeaCommentPayload
 };
+
+type SubmitIdeaCommentVariables = {
+  // ideaId is already known in the hook's scope,
+  // so the variable passed via mutate() only needs to be the comment data itself.
+  // Let's rethink the mutationFn structure.
+  commentData: IdeaCommentCreateData;
+}
 
 export function useSubmitIdeaComment(ideaId: string) {
   const queryClient = useQueryClient();
-
-  return useMutation<IdeaComment, Error, IdeaCommentCreateData, unknown>({
-    mutationFn: (commentData) => submitIdeaCommentAPI({ ideaId, commentData }),
+  return useMutation<IdeaComment, Error, IdeaCommentCreateData>({
+    mutationFn: (commentDataVariable) => {
+      // Call the API function, passing both the ideaId (from hook scope)
+      // and the commentDataVariable (from mutate call)
+      return submitIdeaCommentAPI({ ideaId: ideaId, commentData: commentDataVariable });
+  },
     onSuccess: (newComment) => {
-      toastSuccess("Comment posted successfully!");
-      // Invalidate and refetch comments for this idea to show the new one
-      // Or, for optimistic updates, add the new comment to the cache directly
+      toastSuccess("Comment posted!");
+      // Invalidate comments query to refetch
       queryClient.invalidateQueries({ queryKey: ["ideaComments", ideaId] });
-
-      // --- OPTIONAL: Optimistic Update Example ---
-      // queryClient.setQueryData<InfiniteData<PaginatedIdeaComments>>(['ideaComments', ideaId], (oldData) => {
-      //   if (!oldData) return oldData;
-      //   const firstPage = oldData.pages[0];
-      //   const newFirstPage = {
-      //     ...firstPage,
-      //     data: [newComment, ...firstPage.data], // Add to the top
-      //     pagination: {
-      //       ...firstPage.pagination,
-      //       totalItems: firstPage.pagination.totalItems + 1,
-      //     }
-      //   };
-      //   return {
-      //     ...oldData,
-      //     pages: [newFirstPage, ...oldData.pages.slice(1)],
-      //   };
-      // });
+      // Also invalidate the single idea query to update comment count
+      queryClient.invalidateQueries({ queryKey: ["idea", ideaId] });
     },
     onError: (error) => {
       toastError(error.message || "Could not post comment.");

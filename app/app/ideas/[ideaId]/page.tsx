@@ -24,7 +24,7 @@ interface IdeaPageProps {
 export async function generateMetadata({
   params,
 }: IdeaPageProps): Promise<Metadata> {
-  const { ideaId } = params; // Destructure ideaId
+  const { ideaId } = await params; // Destructure ideaId
   const queryClient = new QueryClient();
 
   try {
@@ -58,7 +58,7 @@ export async function generateMetadata({
 }
 
 export default async function IdeaPage({ params }: IdeaPageProps) {
-  const { ideaId } = params; // Destructure ideaId
+  const { ideaId } = await params; // Destructure ideaId
   const queryClient = new QueryClient();
   let ideaSuccessfullyPrefetched = false;
 

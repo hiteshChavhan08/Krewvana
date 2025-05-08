@@ -1,160 +1,125 @@
 // app/api/ideas/[ideaId]/route.ts
-import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
-import { IdeaUpdateAPISchema } from '@/lib/schemas'; // Use API specific schema
-import { UserRole } from '@prisma/client';
-import { ZodError } from 'zod';
-// import { deductPointsForIdeaDeletion } from '@/lib/points'; // If you implement this
+import { NextResponse, NextRequest } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { IdeaUpdateAPISchema } from "@/lib/schemas";
+import { ZodError } from "zod";
+import { ideaService } from "@/services/ideaService";
+// Import specific response types
+import {
+  GetIdeaByIdServiceResponse,
+  UpdateIdeaServiceResponse,
+  DeleteIdeaServiceResponse,
+} from "@/types/serviceTypes";
 
 interface RouteContext {
-  params: {
-    ideaId: string;
-  };
+  params: { ideaId: string };
 }
 
-export async function GET(request: NextRequest, { params }: RouteContext) { // Use NextRequest
+export async function GET(request: NextRequest, { params }: RouteContext) {
   const session = await getServerSession(authOptions);
   const currentUserId = session?.user?.id;
-  const { ideaId } = params;
-
-  if (!ideaId) {
-    return NextResponse.json({ error: 'Idea ID is required' }, { status: 400 });
-  }
+  const { ideaId } = await params;
   try {
-    const idea = await prisma.idea.findUnique({
-      where: { id: ideaId },
-      include: {
-        submittedBy: { select: { id: true, name: true, image: true } },
-        votes: currentUserId ? { where: { userId: currentUserId }, select: { id: true } } : false,
-        _count: { select: { votes: true, comments: true } },
-      },
-    });
-    if (!idea) return NextResponse.json({ error: 'Idea not found' }, { status: 404 });
+    const result: GetIdeaByIdServiceResponse = await ideaService.getIdeaById(
+      ideaId,
+      currentUserId
+    );
 
-    const processedIdea = {
-      ...idea,
-      currentUserVoted: currentUserId ? idea.votes.length > 0 : false,
-      voteCount: idea._count.votes,
-      commentCount: idea._count.comments,
-    };
-    const { votes, _count, ...restOfIdea } = processedIdea; // Clean response
+    if (!result.success) {
+      // Service layer handles internal errors, returns error response
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status }
+      );
+    }
 
-    return NextResponse.json(restOfIdea);
-  } catch (error) {
-    console.error(`Error fetching idea ${ideaId}:`, error);
-    return NextResponse.json({ error: 'Failed to fetch idea details' }, { status: 500 });
+    // Handle case where idea is not found (service returns success: true, data: null)
+    if (result.data === null) {
+      return NextResponse.json({ error: "Idea not found" }, { status: 404 });
+    }
+
+    // result is now { success: true, data: IdeaWithCountsAndVoteStatus, status: 200 }
+    return NextResponse.json(result.data, { status: result.status });
+  } catch (error: any) {
+    console.error(`[API GET /api/ideas/${ideaId}] Error:`, error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch idea" },
+      { status: 500 }
+    );
   }
 }
 
-export async function PUT(request: NextRequest, { params }: RouteContext) { // Use NextRequest
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id || !session.user.role) { // Ensure role is available
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  const currentUserId = session.user.id;
-  const currentUserRole = session.user.role;
-  const { ideaId } = params;
-
-  if (!ideaId) {
-    return NextResponse.json({ error: 'Idea ID is required' }, { status: 400 });
-  }
-
-  try {
-    const ideaToUpdate = await prisma.idea.findUnique({
-      where: { id: ideaId },
-      select: { submittedById: true, status: true },
-    });
-
-    if (!ideaToUpdate) {
-      return NextResponse.json({ error: 'Idea not found' }, { status: 404 });
-    }
-
-    if (ideaToUpdate.submittedById !== currentUserId && currentUserRole !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const json = await request.json();
-    const data = IdeaUpdateAPISchema.parse(json); // Use API specific schema
-
-    const updatePayload: Partial<typeof data> & { updatedAt?: Date } = {}; // Prisma update type
-    if (data.title !== undefined) updatePayload.title = data.title;
-    if (data.description !== undefined) updatePayload.description = data.description;
-    if (data.category !== undefined) updatePayload.category = data.category;
-    if (currentUserRole === UserRole.ADMIN && data.status !== undefined) {
-      updatePayload.status = data.status;
-    }
-    // Prisma handles updatedAt automatically
-
-    if (Object.keys(updatePayload).length === 0) {
-        return NextResponse.json({ error: "No valid fields provided for update" }, { status: 400 });
-    }
-
-
-    const updatedIdeaPrisma = await prisma.idea.update({
-      where: { id: ideaId },
-      data: updatePayload,
-      include: {
-        submittedBy: { select: { id: true, name: true, image: true } },
-        votes: { where: { userId: currentUserId }, select: { id: true } },
-        _count: { select: { votes: true, comments: true } },
-      },
-    });
-
-    const processedUpdatedIdea = {
-      ...updatedIdeaPrisma,
-      currentUserVoted: updatedIdeaPrisma.votes.length > 0,
-      voteCount: updatedIdeaPrisma._count.votes,
-      commentCount: updatedIdeaPrisma._count.comments,
-    };
-    const { votes, _count, ...restOfUpdatedIdea } = processedUpdatedIdea;
-
-    return NextResponse.json(restOfUpdatedIdea);
-
-  } catch (error) {
-    if (error instanceof ZodError) {
-      return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 });
-    }
-    console.error(`Error updating idea ${ideaId}:`, error);
-    return NextResponse.json({ error: 'Failed to update idea' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: NextRequest, { params }: RouteContext) { // Use NextRequest
+export async function PUT(request: NextRequest, { params }: RouteContext) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id || !session.user.role) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const currentUserId = session.user.id;
-  const currentUserRole = session.user.role;
-  const { ideaId } = params;
-
-  if (!ideaId) {
-    return NextResponse.json({ error: 'Idea ID is required' }, { status: 400 });
-  }
-
+  const { ideaId } = await params;
   try {
-    const ideaToDelete = await prisma.idea.findUnique({
-      where: { id: ideaId },
-      select: { submittedById: true },
-    });
+    const json = await request.json();
+    const data = IdeaUpdateAPISchema.parse(json);
+    const result: UpdateIdeaServiceResponse = await ideaService.updateIdea(
+      ideaId,
+      data,
+      session.user.id,
+      session.user.role
+    );
 
-    if (!ideaToDelete) {
-      return NextResponse.json({ error: 'Idea not found' }, { status: 404 });
+    if (!result.success) {
+      // Handles not found, forbidden, validation error from service refine, or internal error
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status }
+      );
     }
-
-    if (ideaToDelete.submittedById !== currentUserId && currentUserRole !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // result is { success: true, data: IdeaWithCountsAndVoteStatus, status: 200 }
+    return NextResponse.json(result.data, { status: result.status });
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { error: "Validation failed", details: error.errors },
+        { status: 400 }
+      );
     }
+    console.error(`[API PUT /api/ideas/${ideaId}] Error:`, error);
+    return NextResponse.json(
+      { error: error.message || "Failed to update idea" },
+      { status: 500 }
+    );
+  }
+}
 
-    await prisma.idea.delete({
-      where: { id: ideaId },
-    });
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id || !session.user.role) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { ideaId } = await params;
+  try {
+    const result: DeleteIdeaServiceResponse = await ideaService.deleteIdea(
+      ideaId,
+      session.user.id,
+      session.user.role
+    );
 
-    return NextResponse.json({ message: 'Idea deleted successfully' }, { status: 200 });
-  } catch (error) {
-    console.error(`Error deleting idea ${ideaId}:`, error);
-    return NextResponse.json({ error: 'Failed to delete idea' }, { status: 500 });
+    if (!result.success) {
+      // Handles not found, forbidden, or internal error
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status }
+      );
+    }
+    // result is { success: true, data: { message: string }, status: 200 }
+    // The error "Property 'message' does not exist on type 'DeleteIdeaServiceResponse'"
+    // was likely because TS didn't narrow the type correctly *inside* the success block previously.
+    // It should now know 'result' is the success type here.
+    return NextResponse.json(result.data, { status: result.status }); // Return { message: "..." }
+  } catch (error: any) {
+    console.error(`[API DELETE /api/ideas/${ideaId}] Error:`, error);
+    return NextResponse.json(
+      { error: error.message || "Failed to delete idea" },
+      { status: 500 }
+    );
   }
 }

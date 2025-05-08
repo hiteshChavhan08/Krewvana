@@ -1,33 +1,22 @@
 // hooks/ideas/useIdeas.ts
-import { IdeaUpdateAPIData } from '@/lib/schemas';
-import { toastError, toastSuccess } from '@/utils/toast';
-import { useQuery, useInfiniteQuery, InfiniteData, useQueryClient, useMutation } from '@tanstack/react-query'; // Ensure InfiniteData is imported
+import {
+  useQuery,
+  useInfiniteQuery,
+  InfiniteData,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { IdeaUpdateAPIData, IdeaCreateAPIData } from "@/lib/schemas"; // Use API specific schemas
+import { toastSuccess, toastError } from "@/utils/toast";
+import { IdeaWithCountsAndVoteStatus } from "@/types/serviceTypes"; // Use type from serviceTypes
 
+// Base URL for server-side fetching - IMPORTANT: Needs env var set!
+const BASE_URL =
+  process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
 
-export interface IdeaAuthor {
-  id: string;
-  name: string | null;
-  image: string | null;
-}
-
-export interface Idea {
-  id: string;
-  title: string;
-  description: string;
-  category: string[];
-  status: string; // Or your IdeaStatus enum
-  submittedById: string;
-  submittedBy: IdeaAuthor; // Make sure this is the full object if needed by IdeaCard
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
-  currentUserVoted?: boolean; // Optional, as it depends on current user session
-  voteCount: number;
-  commentCount?: number; // Add this if you want it on cards too
-   // _count?: { // If you prefer to keep the raw count structure
-  //   votes: number;
-  //   comments?: number;
-  // };
-}
+// --- Type Definitions ---
+export type Idea = IdeaWithCountsAndVoteStatus; // Alias
+export type IdeaDetail = IdeaWithCountsAndVoteStatus; // Alias
 
 export interface PaginatedIdeas {
   data: Idea[];
@@ -35,187 +24,204 @@ export interface PaginatedIdeas {
     page: number;
     limit: number;
     totalPages: number;
-    totalIdeas: number;
+    totalItems: number;
   };
 }
 
-
-// --- Existing useIdeas hook for lists (ensure Idea type above is used) ---
+// --- API Fetching Functions (Absolute URLs) ---
 export const fetchIdeasAPI = async ({
   pageParam = 1,
-  limit = 9, // Or your default
-  sortBy = 'createdAt',
-  order = 'desc',
+  limit = 9,
+  sortBy = "createdAt",
+  order = "desc",
 }: {
   pageParam?: number;
   limit?: number;
-  sortBy?: 'createdAt' | 'votes';
-  order?: 'asc' | 'desc';
+  sortBy?: string;
+  order?: string;
 }): Promise<PaginatedIdeas> => {
-  const response = await fetch(
-    `/api/ideas?page=${pageParam}&limit=${limit}&sortBy=${sortBy}&order=${order}`
-  );
+  const url = new URL(`${BASE_URL}/api/ideas`);
+  url.searchParams.set("page", String(pageParam));
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("sortBy", sortBy);
+  url.searchParams.set("order", order);
+  const response = await fetch(url.toString());
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to fetch ideas' }));
-    throw new Error(errorData.error || 'Failed to fetch ideas');
+    const errorData = await response
+      .json()
+      .catch(() => ({ error: `Failed to fetch ideas (${response.status})` }));
+    throw new Error(
+      errorData.error || `Failed to fetch ideas (${response.status})`
+    );
   }
   return response.json();
 };
 
+export const fetchIdeaByIdAPI = async (ideaId: string): Promise<IdeaDetail> => {
+  const url = `${BASE_URL}/api/ideas/${ideaId}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 404) throw new Error("Idea not found");
+    const errorData = await response
+      .json()
+      .catch(() => ({
+        error: `Failed to fetch idea ${ideaId} (${response.status})`,
+      }));
+    throw new Error(
+      errorData.error || `Failed to fetch idea ${ideaId} (${response.status})`
+    );
+  }
+  const data = await response.json();
+  if (!data) {
+    // Handle case where API might return 200 OK with empty body for "not found"
+    throw new Error("Idea not found");
+  }
+  return data;
+};
+
+// --- React Query Hooks ---
 export function useIdeas({
-  sortBy = 'createdAt',
-  order = 'desc',
+  sortBy = "createdAt",
+  order = "desc",
   limit = 9,
 }: {
-  sortBy?: 'createdAt' | 'votes';
-  order?: 'asc' | 'desc';
+  sortBy?: string;
+  order?: string;
   limit?: number;
 }) {
   return useInfiniteQuery<
     PaginatedIdeas,
     Error,
     InfiniteData<PaginatedIdeas, number>,
-    readonly [string, string, string], // Adjusted queryKey type
+    readonly [string, string, string],
     number
   >({
-    queryKey: ['ideas', sortBy, order] as const,
-    queryFn: ({ pageParam }) => fetchIdeasAPI({ pageParam, sortBy, order, limit }),
+    queryKey: ["ideas", sortBy, order] as const,
+    queryFn: ({ pageParam }) =>
+      fetchIdeasAPI({ pageParam, sortBy, order, limit }),
+    initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       if (lastPage.pagination.page < lastPage.pagination.totalPages) {
         return lastPage.pagination.page + 1;
       }
       return undefined;
     },
-    initialPageParam: 1,
   });
 }
-
-
-// --- NEW: For fetching a single idea ---
-export interface IdeaDetail extends Idea { // Extending the base Idea type
-  // Add any fields specific to the detail view that are NOT in the base Idea type.
-  // If your API for a single idea adds more, like a more detailed 'submittedBy',
-  // or specific calculated fields, define them here.
-  // For now, if it's the same structure as 'Idea' but guaranteed to be one item,
-  // 'Idea' itself might be sufficient, but 'IdeaDetail' provides clarity.
-  // Example: if description was truncated in Idea, but full in IdeaDetail
-  // fullDescription: string;
-  // Ensure your API for GET /api/ideas/[ideaId] returns this structure.
-}
-
-export const fetchIdeaByIdAPI = async (ideaId: string): Promise<IdeaDetail> => {
-  const response = await fetch(`/api/ideas/${ideaId}`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to fetch idea details' }));
-    throw new Error(errorData.error || 'Failed to fetch idea details');
-  }
-  return response.json(); // This should return data matching IdeaDetail
-};
 
 export function useIdea(ideaId: string) {
   return useQuery<IdeaDetail, Error, IdeaDetail, readonly [string, string]>({
-    queryKey: ['idea', ideaId] as const,
+    queryKey: ["idea", ideaId] as const,
     queryFn: () => fetchIdeaByIdAPI(ideaId),
     enabled: !!ideaId,
+    staleTime: 10 * 1000,
   });
 }
 
-// --- Hook to Update an Idea ---
-const updateIdeaAPI = async ({ ideaId, data }: { ideaId: string, data: IdeaUpdateAPIData }): Promise<IdeaDetail> => {
+// --- Mutation Hooks ---
+const updateIdeaAPI = async ({
+  ideaId,
+  data,
+}: {
+  ideaId: string;
+  data: IdeaUpdateAPIData;
+}): Promise<IdeaDetail> => {
   const response = await fetch(`/api/ideas/${ideaId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to update idea' }));
-    throw new Error(errorData.error || 'Failed to update idea');
+    const errorData = await response
+      .json()
+      .catch(() => ({ error: `Update failed (${response.status})` }));
+    throw new Error(errorData.error || `Update failed (${response.status})`);
   }
-  return response.json(); // API should return the updated IdeaDetail
+  return response.json(); // API returns the updated IdeaDetail
 };
 
 export function useUpdateIdea() {
   const queryClient = useQueryClient();
-
-  return useMutation<IdeaDetail, Error, { ideaId: string; data: IdeaUpdateAPIData }>({
+  return useMutation<
+    IdeaDetail,
+    Error,
+    { ideaId: string; data: IdeaUpdateAPIData }
+  >({
     mutationFn: updateIdeaAPI,
     onSuccess: (updatedIdeaData, variables) => {
-      toastSuccess('Idea updated successfully!');
-
-      // Invalidate and refetch the single idea query
-      queryClient.invalidateQueries({ queryKey: ['idea', variables.ideaId] });
-
-      // Optimistically update the idea in the ideas list cache (if you want)
-      // This is more complex as you need to find and update the specific idea in potentially multiple pages
-      queryClient.setQueryData<InfiniteData<PaginatedIdeas, number>>(
-        // Match the queryKey used by useIdeas (e.g., including sort order)
-        // This example assumes a simple queryKey for the list; adjust as needed.
-        // You might need to invalidate all 'ideas' queries if keys are dynamic: queryClient.invalidateQueries({ queryKey: ['ideas'] });
-        ['ideas'], // Adjust this queryKey to match your useIdeas hook's key
-        (oldData) => {
-          if (!oldData) return oldData;
-          return {
-            ...oldData,
-            pages: oldData.pages.map(page => ({
-              ...page,
-              data: page.data.map(idea =>
-                idea.id === variables.ideaId ? { ...idea, ...updatedIdeaData } : idea
-              ),
-            })),
-          };
-        }
-      );
+      toastSuccess("Idea updated successfully!");
+      queryClient.invalidateQueries({ queryKey: ["idea", variables.ideaId] });
+      // Optionally invalidate list queries or optimistically update
+      queryClient.invalidateQueries({ queryKey: ["ideas"] });
     },
     onError: (error) => {
-      toastError(error.message || 'Could not update idea.');
+      toastError(error.message || "Could not update idea.");
     },
   });
 }
 
-// --- Hook to Delete an Idea ---
 const deleteIdeaAPI = async (ideaId: string): Promise<{ message: string }> => {
-  const response = await fetch(`/api/ideas/${ideaId}`, {
-    method: 'DELETE',
-  });
+  const response = await fetch(`/api/ideas/${ideaId}`, { method: "DELETE" });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to delete idea' }));
-    throw new Error(errorData.error || 'Failed to delete idea');
+    const errorData = await response
+      .json()
+      .catch(() => ({ error: `Delete failed (${response.status})` }));
+    throw new Error(errorData.error || `Delete failed (${response.status})`);
   }
   return response.json();
 };
 
 export function useDeleteIdea() {
   const queryClient = useQueryClient();
-
-  return useMutation<{ message: string }, Error, string, unknown>({ // Third generic is variables (ideaId: string)
-    mutationFn: deleteIdeaAPI, // Receives ideaId string
-    onSuccess: (data, ideaId) => { // 'variables' here is the ideaId
-      toastSuccess(data.message || 'Idea deleted successfully!');
-
-      // Remove the idea from the single idea query cache if it exists
-      queryClient.removeQueries({ queryKey: ['idea', ideaId] });
-
-      // Remove the idea from the ideas list cache
-      // Similar to update, adjust queryKey. Invalidate is often simpler.
-      queryClient.invalidateQueries({ queryKey: ['ideas'] }); // Simplest way to refetch lists
-      
-      // More complex optimistic removal from list:
-      // queryClient.setQueryData<InfiniteData<PaginatedIdeas, number>>(
-      //   ['ideas'], // Adjust this queryKey
-      //   (oldData) => {
-      //     if (!oldData) return oldData;
-      //     return {
-      //       ...oldData,
-      //       pages: oldData.pages.map(page => ({
-      //         ...page,
-      //         data: page.data.filter(idea => idea.id !== ideaId),
-      //       })),
-      //     };
-      //   }
-      // );
+  return useMutation<{ message: string }, Error, string>({
+    mutationFn: deleteIdeaAPI,
+    onSuccess: (data, ideaId) => {
+      toastSuccess(data.message || "Idea deleted successfully!");
+      queryClient.removeQueries({ queryKey: ["idea", ideaId] });
+      queryClient.invalidateQueries({ queryKey: ["ideas"] });
     },
-    onError: (error: { message: any; }) => {
-      toastError(error.message || 'Could not delete idea.');
+    onError: (error) => {
+      toastError(error.message || "Could not delete idea.");
+    },
+  });
+}
+
+// Define vote result type based on VoteOnIdeaServiceResponse data
+type VoteResultData = {
+  message: string;
+  ideaId: string;
+  voteCount: number;
+  currentUserVoted: boolean;
+};
+const voteIdeaAPI = async (ideaId: string): Promise<VoteResultData> => {
+  const response = await fetch(`/api/ideas/${ideaId}/vote`, { method: "POST" });
+  if (!response.ok) {
+    const errorData = await response
+      .json()
+      .catch(() => ({ error: `Vote failed (${response.status})` }));
+    throw new Error(errorData.error || `Vote failed (${response.status})`);
+  }
+  return response.json();
+};
+export function useVoteIdea() {
+  const queryClient = useQueryClient();
+  return useMutation<VoteResultData, Error, string>({
+    mutationFn: voteIdeaAPI,
+    onSuccess: (data, ideaId) => {
+      // Optimistically update the specific idea query
+      queryClient.setQueryData<IdeaDetail>(["idea", ideaId], (oldData) => {
+        if (!oldData) return undefined;
+        return {
+          ...oldData,
+          voteCount: data.voteCount,
+          currentUserVoted: data.currentUserVoted,
+        };
+      });
+      // Optionally invalidate lists or update them optimistically too
+      queryClient.invalidateQueries({ queryKey: ["ideas"] }); // Invalidate lists
+    },
+    onError: (error) => {
+      toastError(error.message || "Could not vote.");
     },
   });
 }

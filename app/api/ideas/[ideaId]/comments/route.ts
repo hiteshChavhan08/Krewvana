@@ -2,86 +2,72 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
 import {
   IdeaCommentCreateSchema,
   IdeaCommentsQuerySchema,
 } from "@/lib/schemas";
 import { ZodError } from "zod";
+import { ideaService } from "@/services/ideaService";
+// Import the specific response types
+import {
+  CreateIdeaCommentServiceResponse,
+  GetIdeaCommentsServiceResponse,
+} from "@/types/serviceTypes";
 
 interface RouteContext {
-  params: {
-    ideaId: string;
-  };
+  params: { ideaId: string };
 }
 
-// POST: Create a new comment for an idea
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  // Use NextRequest
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
-  const { ideaId } = params;
-
-  if (!ideaId) {
-    return NextResponse.json({ error: "Idea ID is required" }, { status: 400 });
-  }
-
+  const { ideaId } = await params;
   try {
-    const ideaExists = await prisma.idea.findUnique({
-      where: { id: ideaId },
-      select: { id: true, submittedById: true },
-    });
-
-    if (!ideaExists) {
-      return NextResponse.json({ error: "Idea not found" }, { status: 404 });
-    }
-
     const json = await request.json();
     const data = IdeaCommentCreateSchema.parse(json);
+    // Add type annotation to help TS
+    const result: CreateIdeaCommentServiceResponse =
+      await ideaService.createIdeaComment(ideaId, data, session.user.id);
 
-    const newComment = await prisma.ideaComment.create({
-      data: {
-        content: data.content,
-        authorId: userId,
-        ideaId: ideaId,
-      },
-      include: {
-        author: {
-          select: { id: true, name: true, image: true },
-        },
-      },
-    });
-    // Optional: Add points and notification logic here
-    return NextResponse.json(newComment, { status: 201 });
-  } catch (error) {
+    if (!result.success) {
+      // Now TS knows result is ServiceErrorResponse inside this block
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status }
+      );
+    }
+    // Outside the block, TS knows result is the success type
+    return NextResponse.json(result.data, { status: result.status });
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Validation failed", details: error.errors },
         { status: 400 }
       );
     }
-    console.error(`[API /api/ideas/${ideaId}/comments POST] Error:`, error);
+    console.error(
+      `[API POST /api/ideas/${params.ideaId}/comments] Error:`,
+      error
+    );
     return NextResponse.json(
-      { error: "Failed to create comment" },
+      { error: error.message || "Failed to create comment" },
       { status: 500 }
     );
   }
 }
 
-// GET: Fetch comments for an idea (with pagination)
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  // Use NextRequest
-  const { ideaId } = params;
+  const { ideaId } = await params;
   if (!ideaId) {
     return NextResponse.json({ error: "Idea ID is required" }, { status: 400 });
   }
 
+  // URL Parsing logic...
   let fullUrlString: string;
   try {
-    new URL(request.url); // Test if absolute
+    new URL(request.url);
     fullUrlString = request.url;
   } catch (e) {
     const host = request.headers.get("host");
@@ -91,11 +77,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         ? "https"
         : "http");
     if (!host) {
-      console.error(
-        `API /api/ideas/${ideaId}/comments GET: 'host' header is missing.`
-      );
       return NextResponse.json(
-        { error: "Internal server configuration error" },
+        { error: "Internal server configuration error (missing host)" },
         { status: 500 }
       );
     }
@@ -104,53 +87,35 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   const { searchParams } = new URL(fullUrlString);
 
   try {
-    const ideaExists = await prisma.idea.findUnique({
-      where: { id: ideaId },
-      select: { id: true },
-    });
-    if (!ideaExists) {
-      return NextResponse.json({ error: "Idea not found" }, { status: 404 });
-    }
-
-    const queryParams = IdeaCommentsQuerySchema.parse(
+    const queryData = IdeaCommentsQuerySchema.parse(
       Object.fromEntries(searchParams)
     );
-    const { page, limit, sortBy, order } = queryParams;
-    const skip = (page - 1) * limit;
+    // Add type annotation
+    const result: GetIdeaCommentsServiceResponse =
+      await ideaService.getIdeaComments(ideaId, queryData);
 
-    const comments = await prisma.ideaComment.findMany({
-      where: { ideaId: ideaId },
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: order },
-      include: {
-        author: { select: { id: true, name: true, image: true } },
-      },
-    });
-
-    const totalComments = await prisma.ideaComment.count({
-      where: { ideaId: ideaId },
-    });
-
-    return NextResponse.json({
-      data: comments,
-      pagination: {
-        page,
-        limit,
-        totalPages: Math.ceil(totalComments / limit),
-        totalItems: totalComments,
-      },
-    });
-  } catch (error) {
+    if (!result.success) {
+      // TS knows result is ServiceErrorResponse
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status }
+      );
+    }
+    // TS knows result is PaginatedServiceSuccessResponse<IdeaCommentPayload>
+    return NextResponse.json(
+      { data: result.data, pagination: result.pagination },
+      { status: result.status }
+    );
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Invalid query parameters", details: error.errors },
         { status: 400 }
       );
     }
-    console.error(`[API /api/ideas/${ideaId}/comments GET] Error:`, error);
+    console.error(`[API GET /api/ideas/${ideaId}/comments] Error:`, error);
     return NextResponse.json(
-      { error: "Failed to fetch comments" },
+      { error: error.message || "Failed to fetch comments" },
       { status: 500 }
     );
   }
