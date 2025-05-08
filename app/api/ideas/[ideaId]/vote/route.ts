@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma"; // Ensure this is your actual prisma client instance
 import { awardPoints, deductPoints } from "@/lib/points";
 import { PointLogType } from "@prisma/client";
 import { getPointsForAction } from "@/lib/constants";
@@ -13,83 +13,104 @@ interface RouteContext {
   };
 }
 
-// POST: Vote for an idea (or toggle vote)
 export async function POST(request: Request, { params }: RouteContext) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
-  const { ideaId } = params;
+  const { ideaId: routeIdeaId } =  await params; // Renamed to avoid conflict with idea.id from DB
 
-  if (!ideaId) {
+  if (!routeIdeaId) {
     return NextResponse.json({ error: "Idea ID is required" }, { status: 400 });
   }
 
   try {
-    // Check if the idea exists
-    const idea = await prisma.idea.findUnique({ where: { id: ideaId } });
+    const idea = await prisma.idea.findUnique({
+      where: { id: routeIdeaId },
+      select: { id: true, title: true, submittedById: true },
+    });
+
     if (!idea) {
       return NextResponse.json({ error: "Idea not found" }, { status: 404 });
     }
 
-    // Check if the user has already voted
     const existingVote = await prisma.ideaVote.findUnique({
       where: {
-        userId_ideaId: {
-          // Using the compound unique index
-          userId: userId,
-          ideaId: ideaId,
-        },
+        userId_ideaId: { userId: userId, ideaId: idea.id }, // Use idea.id from fetched idea
       },
+      select: { id: true },
     });
 
-    let newVoteCount;
-    let currentUserVoted;
+    let currentUserVoted: boolean;
+    let updatedVoteCount: number;
 
     if (existingVote) {
-      // User has voted, so unvote (remove the vote)
-      await prisma.ideaVote.delete({ where: { id: existingVote.id } });
+      const voteIdToRemove = existingVote.id;
+      await prisma.ideaVote.delete({
+        where: { id: voteIdToRemove },
+      });
       currentUserVoted = false;
+      console.log(
+        `[API/UnvoteIdea] IdeaVote ${voteIdToRemove} removed for IdeaID: ${idea.id} by UserID: ${userId}`
+      );
 
-      // Deduct points from the idea submitter
       if (idea.submittedById) {
         const pointsForVote = getPointsForAction(
           PointLogType.IDEA_VOTE_RECEIVED
         );
-        await deductPoints({
-          userId: idea.submittedById,
-          actionType: PointLogType.IDEA_VOTE_RECEIVED, // Or a new 'IDEA_VOTE_REMOVED' type
-          originalPointsToDeduct: pointsForVote,
-          reason: `Vote removed for idea: "${idea.title.substring(0, 50)}${
-            idea.title.length > 50 ? "..." : ""
-          }"`,
-          relatedIdeaId: idea.id,
-        });
+        if (pointsForVote > 0) {
+          console.log(
+            `[API/UnvoteIdea] Attempting to deduct IDEA_VOTE_RECEIVED points from idea author UserID: ${idea.submittedById}, IdeaID: ${idea.id}`
+          );
+          const deductionResult = await deductPoints({
+            userId: idea.submittedById,
+            actionType: PointLogType.IDEA_VOTE_RECEIVED,
+            originalPointsToDeduct: pointsForVote,
+            reason: `Vote removed for idea: "${idea.title.substring(0, 50)}${
+              idea.title.length > 50 ? "..." : ""
+            }"`,
+            ideaId: idea.id, // This links to the Idea model directly in PointLog
+            relatedIdeaVoteId: voteIdToRemove, // <<< --- CORRECTED: Use relatedIdeaVoteId --- >>>
+          });
+          console.log(`[API/UnvoteIdea] deductPoints result:`, deductionResult);
+        }
       }
     } else {
-      // User has not voted, so add a vote
-      await prisma.ideaVote.create({
-        data: { userId: userId, ideaId: ideaId },
+      const newVote = await prisma.ideaVote.create({
+        data: {
+          userId: userId,
+          ideaId: idea.id, // Use idea.id from fetched idea
+        },
+        select: { id: true },
       });
       currentUserVoted = true;
+      console.log(
+        `[API/VoteIdea] IdeaVote ${newVote.id} added for IdeaID: ${idea.id} by UserID: ${userId}`
+      );
 
-      // Award points to the idea submitter
       if (idea.submittedById) {
-        await awardPoints({
+        console.log(
+          `[API/VoteIdea] Attempting to award IDEA_VOTE_RECEIVED points to idea author UserID: ${idea.submittedById}, IdeaID: ${idea.id}`
+        );
+        const pointsResult = await awardPoints({
           userId: idea.submittedById,
           actionType: PointLogType.IDEA_VOTE_RECEIVED,
           reason: `Received vote for idea: "${idea.title.substring(0, 50)}${
             idea.title.length > 50 ? "..." : ""
           }"`,
-          relatedIdeaId: idea.id,
+          ideaId: idea.id, // This links to the Idea model directly in PointLog
+          relatedIdeaVoteId: newVote.id, // <<< --- CORRECTED: Use relatedIdeaVoteId --- >>>
         });
+        console.log(
+          `[API/VoteIdea] awardPoints result for IDEA_VOTE_RECEIVED:`,
+          pointsResult
+        );
       }
     }
 
-    // Get the updated vote count
-    const updatedVoteCount = await prisma.ideaVote.count({
-      where: { ideaId: ideaId },
+    updatedVoteCount = await prisma.ideaVote.count({
+      where: { ideaId: idea.id }, // Use idea.id from fetched idea
     });
 
     return NextResponse.json(
@@ -97,14 +118,17 @@ export async function POST(request: Request, { params }: RouteContext) {
         message: currentUserVoted
           ? "Vote added successfully"
           : "Vote removed successfully",
-        ideaId: ideaId,
+        ideaId: idea.id,
         voteCount: updatedVoteCount,
         currentUserVoted: currentUserVoted,
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error(`Error voting for idea ${ideaId}:`, error);
+    console.error(
+      `[API /api/ideas/${routeIdeaId}/vote] Error voting for idea:`,
+      error
+    );
     return NextResponse.json(
       { error: "Failed to process vote" },
       { status: 500 }

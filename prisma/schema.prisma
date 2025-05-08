@@ -577,33 +577,37 @@ model KudosCategoryLink {
 model PointLog {
   id            String        @id @default(cuid())
   pointsAwarded Int
-  type          PointLogType? // Reason for points
-  reason        String? // Optional additional text detail
+  type          PointLogType?
+  reason        String?
   timestamp     DateTime      @default(now())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Links to the specific action that triggered the points (nullable)
   kudosId String?
   kudos   Kudos?  @relation(fields: [kudosId], references: [id], onDelete: SetNull)
 
-  acceptedAnswerId String? @unique // Unique link: Only one PointLog for accepting a specific answer
+  acceptedAnswerId String? @unique
   acceptedAnswer   Answer? @relation(fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
 
-  postedAnswerId String? @unique // Unique link: Only one PointLog for posting a specific answer
+  postedAnswerId String? @unique
   postedAnswer   Answer? @relation("PointsForPostingAnswer", fields: [postedAnswerId], references: [id], onDelete: SetNull)
 
-  relatedVoteId String? // Non-unique: Multiple logs might relate to votes (giving/receiving)
+  relatedVoteId String?
   relatedVote   Vote?   @relation("PointsForVote", fields: [relatedVoteId], references: [id], onDelete: SetNull)
 
-  badgeId            String?
-  badge              Badge?            @relation(fields: [badgeId], references: [id], onDelete: SetNull)
-  ideaId             String?
-  idea               Idea?             @relation(fields: [ideaId], references: [id], onDelete: SetNull) // Assuming you name the Idea model 'Idea'
+  badgeId String?
+  badge   Badge?  @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+
+  // --- ADD THESE FIELDS ---
+  ideaId String?
+  idea   Idea?   @relation(fields: [ideaId], references: [id], onDelete: SetNull) // Assuming your Idea model is named 'Idea'
+
   learningResourceId String?
   learningResource   LearningResource? @relation(fields: [learningResourceId], references: [id], onDelete: SetNull)
-  // Note: Removed Vote[] relation from here as it was redundant with relatedVoteId/relatedVote
+  // --- END ADDED FIELDS ---
+  relatedIdeaVoteId  String? // <<< NEW FIELD
+  relatedIdeaVote    IdeaVote?         @relation(fields: [relatedIdeaVoteId], references: [id], onDelete: SetNull) // <<< NEW RELATION
 
   // Indexes
   @@index([userId])
@@ -614,8 +618,9 @@ model PointLog {
   @@index([acceptedAnswerId])
   @@index([badgeId])
   @@index([kudosId])
-  @@index([ideaId])
-  @@index([learningResourceId])
+  @@index([ideaId]) // Add index if you add the field
+  @@index([learningResourceId]) // Add index if you add the field
+  @@index([relatedIdeaVoteId])
 }
 
 model LearningResource {
@@ -762,7 +767,8 @@ model IdeaVote {
   ideaId String
   idea   Idea   @relation("IdeaVotes", fields: [ideaId], references: [id])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime   @default(now())
+  PointLog  PointLog[]
 
   @@unique([userId, ideaId]) // A user can vote for an idea only once
 }

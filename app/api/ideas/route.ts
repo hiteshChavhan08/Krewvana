@@ -105,14 +105,22 @@ export async function POST(request: Request) {
     });
 
     if (newIdea) {
-      await awardPoints({
+      console.log(
+        `[API/Ideas] Attempting to award points for IDEA_SUBMITTED to UserID: ${userId}, IdeaID: ${newIdea.id}`
+      ); // <<< LOG
+      const pointsResult = await awardPoints({
+        // Store result
         userId: userId,
-        actionType: PointLogType.IDEA_SUBMITTED, // Use your enum member
+        actionType: PointLogType.IDEA_SUBMITTED,
         reason: `Submitted idea: "${newIdea.title.substring(0, 50)}${
           newIdea.title.length > 50 ? "..." : ""
         }"`,
-        relatedIdeaId: newIdea.id, // If you add ideaId to PointLog
+        ideaId: newIdea.id,
       });
+      console.log(
+        `[API/Ideas] awardPoints result for IDEA_SUBMITTED:`,
+        pointsResult
+      );
     }
     return NextResponse.json(
       {

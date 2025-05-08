@@ -85,7 +85,7 @@ export async function POST(request: Request) {
           0,
           50
         )}${newResource.title.length > 50 ? "..." : ""}"`,
-        relatedResourceId: newResource.id, // If you add resourceId to PointLog
+        learningResourceId: newResource.id, // If you add resourceId to PointLog
       });
     }
     return NextResponse.json(newResource, { status: 201 });
