@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { IdeaCreateAPISchema } from "@/lib/schemas";
 import { ZodError } from "zod";
 import { ideaService } from "@/services/ideaService"; // Import the service
+import { CreateIdeaServiceResponse } from "@/types/serviceTypes";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -61,8 +62,15 @@ export async function POST(request: NextRequest) {
   try {
     const json = await request.json();
     const data = IdeaCreateAPISchema.parse(json);
-    const newIdea = await ideaService.createIdea(data, session.user.id);
-    return NextResponse.json(newIdea, { status: 201 });
+    const result: CreateIdeaServiceResponse  = await ideaService.createIdea(data, session.user.id);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+
+  // LOGGING: Check the response data before sending
+  console.log("[API POST /api/ideas] Response Data:", JSON.stringify(result.data, null, 2));
+    
+    return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     if (error instanceof ZodError) {
       return NextResponse.json(

@@ -26,7 +26,7 @@ export async function GET(
     const user = await getCurrentUser();
 
     // 2. Parameter Validation
-    const { sessionId } = params;
+    const { sessionId } = await params;
     if (!sessionId) {
        throw new BadRequestError("Session ID parameter is required.");
     }
