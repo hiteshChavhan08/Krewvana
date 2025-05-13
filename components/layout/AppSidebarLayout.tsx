@@ -163,15 +163,23 @@ export function AppSidebarLayout({ children, user }: AppSidebarLayoutProps) {
             {/* Custom Logout Button */}
             <button
               type="button"
-              onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+              onClick={() => {
+                localStorage.clear();
+                signOut({ callbackUrl: "/auth/signin" });
+              }}
               className={getCustomButtonStyles(open)}
-              aria-label={open ? "Logout" : "Logout"} // Ensure aria-label is always present
+              aria-label="Logout"
               title="Logout" // Tooltip
             >
-              <LogOut className={cn("h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200 group-hover/sidebar:text-primary transition-colors duration-200", !open && "mx-auto")} />
+              <LogOut
+                className={cn(
+                  "h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200 group-hover/sidebar:text-primary transition-colors duration-200",
+                  !open && "mx-auto"
+                )}
+              />
               {open && <span className="ml-0">Logout</span>} {/* Removed margin when text is visible */}
             </button>
-
+            
             {userProfileLinkData && (
                 <SidebarLink link={userProfileLinkData} />
             )}
