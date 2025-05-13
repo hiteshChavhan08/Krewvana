@@ -100,7 +100,7 @@ export function QuestionForm() {
       const newQuestion = await response.json();
       toast.success("Success!", {description: "Your question has been posted." });
       form.reset({ title: '', content: defaultEditorValue, tags: [] }); // Reset form
-      router.push(`/questions/${newQuestion.id}`);
+      router.push(`/app/qna/${newQuestion.id}`);
 
     } catch (error: any) {
       console.error("Submission error:", error);

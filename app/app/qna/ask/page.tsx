@@ -1,4 +1,4 @@
-// app/(main)/ask/page.tsx
+// app/qna/ask/page.tsx
 "use client"; // This page needs client-side interactivity for the form
 
 import { QuestionForm } from '@/components/qna/QuestionForm';

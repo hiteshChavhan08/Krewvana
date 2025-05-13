@@ -5,39 +5,36 @@ import {
   ApiError,
   BadRequestError, // Import custom errors if needed for validation
 } from "@/lib/api/responses";
+import { LeaderboardUser } from "@/types/leaderboard";
 
 // Define or import AuthenticatedUser type (may not be needed if endpoint is public/auth check is simple)
 // interface AuthenticatedUser { id: string; role?: UserRole | null; }
-
 interface LeaderboardParams {
   limit?: number;
   // period?: 'all_time' | 'monthly' | 'weekly'; // Future enhancement
 }
 
 /**
- * Fetches the user leaderboard based on points.
+ * Fetches the user leaderboard based on points and adds rank.
  * @param params - Parameters like limit.
  * @returns An array of ranked users.
+ * @throws BadRequestError for invalid limit.
  */
-export const getLeaderboard = async (params: LeaderboardParams) => {
+export const getLeaderboard = async (
+  params: LeaderboardParams
+): Promise<LeaderboardUser[]> => {
   const { limit = 25 } = params; // Default limit
 
-  // Basic validation (could be done in handler too)
   if (isNaN(limit) || limit <= 0 || limit > 200) {
-    // Add a max limit check
     throw new BadRequestError(
       "Invalid limit parameter. Must be between 1 and 200."
     );
   }
 
-  // TODO: Implement time period filtering later based on 'period' param
-  // This would likely involve filtering PointLog entries within a date range
-  // and aggregating points, rather than just reading the user.points field.
+  // TODO: Implement time period filtering later
 
-  // Fetch users ordered by points
   const users = await prisma.user.findMany({
     select: {
-      // Select only necessary fields
       id: true,
       name: true,
       image: true,
@@ -46,16 +43,20 @@ export const getLeaderboard = async (params: LeaderboardParams) => {
     orderBy: {
       points: "desc",
     },
+    // Fetch slightly more initially if filtering out zero points later
     take: limit,
     // Optional: Filter out users with 0 points if desired
     // where: { points: { gt: 0 } },
   });
 
   // Add rank to the results
-  const rankedLeaderboard = users.map((user, index) => ({
-    ...user,
-    rank: index + 1, // Add 1-based rank
-  }));
+  const rankedLeaderboard: LeaderboardUser[] = users
+    // .filter(user => user.points > 0) // Optional: filter zero points *before* ranking
+    .map((user, index) => ({
+      ...user,
+      rank: index + 1, // Add 1-based rank
+    }));
+  // .slice(0, limit); // Slice again if filtering zero points changed the count
 
   return rankedLeaderboard;
 };

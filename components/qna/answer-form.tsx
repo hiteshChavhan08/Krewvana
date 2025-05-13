@@ -1,156 +1,137 @@
-// components/qna/answer-form.tsx
+// components\qna\answer-form.tsx
 "use client";
 
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import type React from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import type { Value } from "@udecode/plate";
-import { DndProvider } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
-import { Plate } from "@udecode/plate/react"; // <-- Changed import // Import reset utility
+import { Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { CreateAnswerSchema, CreateAnswerInput } from "@/lib/validations/qna";
-import { createAnswer } from "@/lib/actions/qna";
+// --- Plate Imports ---
+import { Plate } from "@udecode/plate/react";
 import { useCreateEditor } from "@/components/editor/use-create-editor";
-import { Editor, EditorContainer } from "@/components/plate-ui/editor";
-import { cn } from "@/lib/utils";
+import { Editor } from "@/components/plate-ui/editor";
+import type { Value } from "@udecode/plate";
+// --- ADD THIS: Import the DnD Provider ---
+import { DndProvider } from "react-dnd"; // Adjust import path if necessary
+import { HTML5Backend } from "react-dnd-html5-backend";
+// --- UI components ---
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Added Card parts
 
 interface AnswerFormProps {
   questionId: string;
-  onAnswerSubmit?: () => void;
+  onAnswerAdded: () => void; // Callback to potentially refetch data
 }
 
-const initialEditorValue: Value = [{ type: "p", children: [{ text: "" }] }];
+const initialValue: Value = [{ type: "p", children: [{ text: "" }] }];
 
-export function AnswerForm({ questionId, onAnswerSubmit }: AnswerFormProps) {
+export const AnswerForm: React.FC<AnswerFormProps> = ({
+  questionId,
+  onAnswerAdded,
+}) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editorValue, setEditorValue] = useState<Value>(initialValue);
 
   const editor = useCreateEditor({
-    /* options */
+    id: `answer-editor-${questionId}`,
+    value: editorValue,
+    // onChange: (newValue) => {
+    //     setEditorValue(newValue);
+    // },
+    // Ensure you are NOT including dnd plugins here if you don't intend to use block dragging
+    // plugins: [...]
   });
 
-  const form = useForm<CreateAnswerInput>({
-    resolver: zodResolver(CreateAnswerSchema),
-    defaultValues: {
-      questionId: questionId,
-      content: initialEditorValue,
-    },
-    mode: "onChange",
-  });
+  const isEditorEmpty = (value: Value): boolean => {
+    // Simple check for empty state
+    return (
+      !value ||
+      value.length === 0 ||
+      (value.length === 1 &&
+        value[0].type === "p" &&
+        value[0].children?.length === 1 &&
+        value[0].children[0].text === "")
+    );
+  };
 
-  async function onSubmit(values: CreateAnswerInput) {
-    const submissionData = values;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isEditorEmpty(editorValue)) {
+      toast.error("Please enter your answer before submitting.");
+      return;
+    }
     setIsSubmitting(true);
-    console.log("Submitting answer:", submissionData);
-  
+    const toastId = toast.loading("Submitting your answer...");
     try {
-      const result = await createAnswer(submissionData);
-  
-      if (result.success && result.answerId) {
-        toast.success("Success!", {
-          description: "Your answer has been posted.",
-        });
-        form.reset();
-  
-        const editorRange = editor.selection;
-  
-        if (
-          editorRange &&
-          (editorRange.anchor.offset !== 0 ||
-            editorRange.focus.offset !== 0 ||
-            editor.children.length > 1 ||
-            (editor.children[0] as any)?.children?.[0]?.text !== "")
-        ) {
-          editor.tf.delete({ at: editorRange });
-        }
-  
-        editor.tf.select(editor.api.start(editor));
-        editor.tf.collapse({ edge: "start" });
-  
-        onAnswerSubmit?.();
-      } else {
-        if (result.fieldErrors) {
-          result.fieldErrors.forEach((err) => {
-            form.setError(err.path[0] as keyof CreateAnswerInput, {
-              type: "server",
-              message: err.message,
-            });
-          });
-          toast.error("Validation Error", {
-            description: "Please check your input.",
-          });
-        } else {
-          toast.error("Error", {
-            description: result.error || "Could not post your answer.",
-          });
-        }
+      const response = await fetch(`/api/qna/questions/${questionId}/answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editorValue }),
+      });
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: "Failed to submit answer. Server error." }));
+        throw new Error(errorData.message || "Failed to submit answer");
       }
-    } catch (error) {
-      console.error("Submit Answer Error:", error);
-      toast.error("Error", { description: "An unexpected error occurred." });
+      toast.success("Answer submitted successfully!", { id: toastId });
+      setEditorValue(initialValue); // Reset state value
+      // Consider editor.reset() if available and needed
+      onAnswerAdded(); // Trigger refetch or update
+    } catch (error: any) {
+      console.error("Error submitting answer:", error);
+      toast.error(
+        error.message || "Failed to submit your answer. Please try again.",
+        { id: toastId }
+      );
     } finally {
       setIsSubmitting(false);
     }
-  }
-  
+  };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-6">
-        {/* --- Content Field using direct Plate integration --- */}
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Your Answer</FormLabel>
-              <FormControl>
-                {/* --- Integrate Plate structure directly --- */}
-                <DndProvider backend={HTML5Backend}>
-                  <Plate
-                    editor={editor}
-                    onChange={({ value }) => {
-                      field.onChange(value);
-                    }}
-                  >
-                    <EditorContainer
-                      className={cn(
-                        "rounded-md border border-input",
-                        "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
-                      )}
-                    >
-                      {/* <FixedToolbar>
-                        <FixedToolbarButtons />
-                      </FixedToolbar> */}
-                      <Editor
-                        variant="default" // Or another valid variant
-                        placeholder="Provide a detailed answer..."
-                        className="min-h-[150px] w-full resize-none px-3 py-2 focus:outline-none"
-                        focused={false}
-                      />
-                    </EditorContainer>
-                  </Plate>
-                </DndProvider>
-                {/* --- End of direct Plate integration --- */}
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Submitting..." : "Post Your Answer"}
-        </Button>
-      </form>
-    </Form>
+    // Changed from div to Card for better visual separation
+    <Card className="mt-6 mb-8 border shadow-sm" id="answer-form-card">
+      <CardHeader>
+        <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
+          Your Answer
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit}>
+          {/* --- Wrap Plate with DndProvider --- */}
+          <DndProvider backend={HTML5Backend}>
+            <div className="overflow-hidden rounded-md border border-input shadow-sm">
+              {" "}
+              {/* Add border/styling */}
+              <Plate editor={editor}>
+                <Editor
+                  placeholder="Write your detailed answer here..."
+                  variant="ai"
+                  className="min-h-[180px] bg-background p-4 text-sm" // Slightly reduced min-height
+                />
+              </Plate>
+            </div>
+          </DndProvider>
+
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="submit"
+              disabled={isSubmitting || isEditorEmpty(editorValue)}
+              className="px-6 min-w-[150px]"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Post Your Answer"
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
-}
+};

@@ -16,7 +16,11 @@ declare module "next-auth" {
       role: UserRole; // Add custom fields like role
     } & DefaultSession["user"]; // Keep the default fields
   }
-
+  interface User extends DefaultUser { // Extend the default User type
+    role: UserRole; // Add the role property
+    // You can add other custom fields from your Prisma User model here if needed
+    // by authorize or OAuth profiles (e.g., points: number;)
+  }
   // If you need to add properties directly to the User model used by NextAuth internally (less common for session)
   // interface User extends DefaultUser {
   //   role: UserRole;
@@ -25,11 +29,7 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   /** Returned by the `jwt` callback and `getToken`, when using JWT sessions */
-  interface JWT extends DefaultJWT {
-    /** OpenID ID Token */
-    idToken?: string;
-    /** User's database id */
-    sub: string; // 'sub' is standard for user id in JWT
-    // role: UserRole; // Add custom fields like role
+  interface JWT {
+    role: UserRole;
   }
 }
